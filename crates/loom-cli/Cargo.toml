@@ -1,0 +1,17 @@
+[package]
+name = "loom-cli"
+description = "CLI binary for LOOM — thin wrapper over loom-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "loom"
+path = "src/main.rs"
+
+[dependencies]
+loom-core.workspace = true
+anyhow.workspace = true
+clap.workspace = true

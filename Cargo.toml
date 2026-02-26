@@ -1,15 +1,18 @@
-[package]
-name = "loom"
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
-description = "Linked Orchestration Of Multirepos — CLI/TUI for managing git worktrees across tightly-coupled repositories"
 license = "MIT"
 repository = "https://github.com/subotic/loom"
 authors = ["Ivan Subotic <ivan.subotic@gmail.com>"]
-keywords = ["git", "worktree", "monorepo", "tui", "cli"]
-categories = ["command-line-utilities", "development-tools"]
 
-[dependencies]
+[workspace.dependencies]
+# Internal
+loom-core = { path = "crates/loom-core" }
+
 # CLI
 clap = { version = "4.5", features = ["derive"] }
 
