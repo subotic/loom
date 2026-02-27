@@ -230,6 +230,103 @@ impl Cli {
         Ok(())
     }
 
+    fn run_list() -> anyhow::Result<()> {
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::workspace::list::{WorkspaceHealth, list_workspaces};
+
+        let config = ensure_config_loaded()?;
+        let summaries = list_workspaces(&config)?;
+
+        if summaries.is_empty() {
+            println!("No workspaces. Run `loom new <name>` to create one.");
+            return Ok(());
+        }
+
+        println!("{:<20} {:<6} {:<12} CREATED", "NAME", "REPOS", "STATUS");
+        for ws in &summaries {
+            let status_str = match &ws.status {
+                WorkspaceHealth::Clean => "clean".to_string(),
+                WorkspaceHealth::Dirty(n) => format!("{n} dirty"),
+                WorkspaceHealth::Broken(msg) => format!("broken: {msg}"),
+            };
+            let date = ws.created.format("%Y-%m-%d");
+            println!(
+                "{:<20} {:<6} {:<12} {}",
+                ws.name, ws.repo_count, status_str, date
+            );
+        }
+
+        Ok(())
+    }
+
+    fn run_status(name: Option<String>, fetch: bool) -> anyhow::Result<()> {
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::workspace;
+        use loom_core::workspace::status::workspace_status;
+
+        let config = ensure_config_loaded()?;
+        let cwd = std::env::current_dir()?;
+
+        // Resolve workspace: by name, by cwd, or fall back to list
+        let (ws_path, manifest) = match workspace::resolve_workspace(name.as_deref(), &cwd, &config)
+        {
+            Ok(result) => result,
+            Err(_) if name.is_none() => {
+                // Outside workspace with no name → delegate to list
+                return Self::run_list();
+            }
+            Err(e) => return Err(e),
+        };
+
+        let status = workspace_status(&manifest, &ws_path, fetch)?;
+
+        println!("Workspace: {}", status.name);
+        println!("Path: {}", status.path.display());
+        if let Some(ref base) = status.base_branch {
+            println!("Base branch: {base}");
+        }
+        println!();
+
+        if status.repos.is_empty() {
+            println!("  No repos in this workspace.");
+            return Ok(());
+        }
+
+        println!(
+            "  {:<20} {:<25} {:<10} AHEAD/BEHIND",
+            "REPO", "BRANCH", "STATUS"
+        );
+        for repo in &status.repos {
+            if !repo.exists {
+                println!("  {:<20} {:<25} (missing)", repo.name, repo.branch);
+                continue;
+            }
+
+            let status_str = if repo.is_dirty {
+                format!("{} changed", repo.change_count)
+            } else {
+                "clean".to_string()
+            };
+
+            let ab_str = if repo.ahead > 0 || repo.behind > 0 {
+                format!("+{} -{}", repo.ahead, repo.behind)
+            } else {
+                "-".to_string()
+            };
+
+            println!(
+                "  {:<20} {:<25} {:<10} {}",
+                repo.name, repo.branch, status_str, ab_str
+            );
+        }
+
+        if !fetch {
+            println!("\n  (ahead/behind based on last fetch — use --fetch for current data)");
+        }
+
+        Ok(())
+    }
+
     fn run_new(
         name: String,
         base: Option<String>,
@@ -340,11 +437,10 @@ impl Cli {
                 println!("loom remove {repo} (force={force}) — not yet implemented");
             }
             Command::List => {
-                println!("loom list — not yet implemented");
+                Self::run_list()?;
             }
             Command::Status { name, fetch } => {
-                let target = name.as_deref().unwrap_or("(detect from cwd)");
-                println!("loom status {target} (fetch={fetch}) — not yet implemented");
+                Self::run_status(name, fetch)?;
             }
             Command::Save { force } => {
                 println!("loom save (force={force}) — not yet implemented");
