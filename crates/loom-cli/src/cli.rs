@@ -143,10 +143,97 @@ impl Cli {
         !self.no_color && std::env::var_os("NO_COLOR").is_none() && !self.json
     }
 
+    fn run_init(&self) -> anyhow::Result<()> {
+        use dialoguer::{Confirm, Input, MultiSelect};
+        use loom_core::config::init;
+
+        // Check if config already exists
+        let config_path = loom_core::config::Config::path()?;
+        if config_path.exists() {
+            let update = Confirm::new()
+                .with_prompt(format!(
+                    "Config already exists at {}. Update it?",
+                    config_path.display()
+                ))
+                .default(false)
+                .interact()?;
+            if !update {
+                println!("Keeping existing config.");
+                return Ok(());
+            }
+        }
+
+        println!("Setting up loom...\n");
+
+        // Auto-detect scan roots
+        let detected = init::detect_scan_roots();
+        let scan_roots: Vec<std::path::PathBuf> = if detected.is_empty() {
+            let input: String = Input::new()
+                .with_prompt(
+                    "No standard code directories found. Enter scan root paths (comma-separated)",
+                )
+                .interact_text()?;
+            input
+                .split(',')
+                .map(|s| std::path::PathBuf::from(s.trim()))
+                .collect()
+        } else {
+            let labels: Vec<String> = detected.iter().map(|p| p.display().to_string()).collect();
+            let defaults: Vec<bool> = vec![true; labels.len()];
+            let selections = MultiSelect::new()
+                .with_prompt("Select scan roots (directories containing your git repos)")
+                .items(&labels)
+                .defaults(&defaults)
+                .interact()?;
+            selections
+                .into_iter()
+                .map(|i| detected[i].clone())
+                .collect()
+        };
+
+        // Workspace root
+        let default_ws = shellexpand::tilde("~/loom").to_string();
+        let ws_input: String = Input::new()
+            .with_prompt("Workspace root directory")
+            .default(default_ws)
+            .interact_text()?;
+        let workspace_root = std::path::PathBuf::from(shellexpand::tilde(&ws_input).as_ref());
+
+        // Terminal detection
+        let detected_terminal = init::detect_terminal();
+        let terminal_default = detected_terminal.unwrap_or_else(|| "ghostty".to_string());
+        let terminal: String = Input::new()
+            .with_prompt("Terminal command")
+            .default(terminal_default)
+            .interact_text()?;
+
+        // Branch prefix
+        let branch_prefix: String = Input::new()
+            .with_prompt("Branch prefix for worktrees")
+            .default("loom".to_string())
+            .interact_text()?;
+
+        // Create config
+        let config = init::create_config(
+            scan_roots,
+            workspace_root,
+            Some(terminal),
+            branch_prefix,
+            vec!["claude-code".to_string()],
+        )?;
+
+        // Save and create directories
+        init::finalize_init(&config)?;
+
+        println!("\nloom initialized successfully!");
+
+        Ok(())
+    }
+
     pub fn run(self) -> anyhow::Result<()> {
         match self.command {
             Command::Init => {
-                println!("loom init — not yet implemented");
+                self.run_init()?;
             }
             Command::New { name, base, repos } => {
                 println!("loom new {name} — not yet implemented");
