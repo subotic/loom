@@ -1,3 +1,5 @@
+pub mod new;
+
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
