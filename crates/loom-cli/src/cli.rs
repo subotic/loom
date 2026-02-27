@@ -458,6 +458,58 @@ impl Cli {
         Ok(())
     }
 
+    fn run_exec(cmd: Vec<String>) -> anyhow::Result<()> {
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::workspace;
+        use loom_core::workspace::exec::exec_in_workspace;
+
+        if cmd.is_empty() {
+            anyhow::bail!("No command provided. Usage: loom exec <command> [args...]");
+        }
+
+        let config = ensure_config_loaded()?;
+        let cwd = std::env::current_dir()?;
+
+        let (_ws_path, manifest) = workspace::resolve_workspace(None, &cwd, &config)?;
+
+        let result = exec_in_workspace(&manifest, &cmd)?;
+
+        // Summary
+        let failed: Vec<_> = result.results.iter().filter(|r| !r.success).collect();
+
+        if !failed.is_empty() {
+            eprintln!("\n{} repo(s) failed:", failed.len());
+            for r in &failed {
+                eprintln!("  {} (exit code {})", r.repo_name, r.exit_code);
+            }
+            std::process::exit(1);
+        }
+
+        Ok(())
+    }
+
+    fn run_shell(name: Option<String>) -> anyhow::Result<()> {
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::workspace;
+        use loom_core::workspace::shell::open_terminal;
+
+        let config = ensure_config_loaded()?;
+        let cwd = std::env::current_dir()?;
+
+        let (ws_path, _manifest) = workspace::resolve_workspace(name.as_deref(), &cwd, &config)?;
+
+        let terminal = config
+            .terminal
+            .as_ref()
+            .map(|t| t.command.as_str())
+            .unwrap_or("ghostty");
+
+        open_terminal(terminal, &ws_path)?;
+        println!("Opened terminal at {}", ws_path.display());
+
+        Ok(())
+    }
+
     fn run_new(
         name: String,
         base: Option<String>,
@@ -583,14 +635,10 @@ impl Cli {
                 Self::run_down(name, force)?;
             }
             Command::Exec { cmd } => {
-                if cmd.is_empty() {
-                    anyhow::bail!("No command provided. Usage: loom exec <command> [args...]");
-                }
-                println!("loom exec {} — not yet implemented", cmd.join(" "));
+                Self::run_exec(cmd)?;
             }
             Command::Shell { name } => {
-                let target = name.as_deref().unwrap_or("(detect from cwd)");
-                println!("loom shell {target} — not yet implemented");
+                Self::run_shell(name)?;
             }
             Command::Completions { shell } => {
                 use clap::CommandFactory;
