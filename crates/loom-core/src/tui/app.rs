@@ -1,0 +1,664 @@
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::time::Instant;
+
+use crate::config::Config;
+use crate::registry::RepoEntry;
+use crate::workspace::list::{WorkspaceHealth, WorkspaceSummary};
+
+/// Which screen the TUI is showing.
+#[derive(Debug, Clone)]
+pub enum Screen {
+    WorkspaceList,
+    WorkspaceDetail {
+        name: String,
+        path: PathBuf,
+    },
+    NewWizard {
+        step: WizardStep,
+        name: String,
+        available_repos: Vec<RepoEntry>,
+        selected: HashSet<usize>,
+        focused: usize,
+    },
+    ConfirmDialog {
+        message: String,
+        action: PendingAction,
+    },
+}
+
+/// Steps in the new-workspace wizard.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WizardStep {
+    EnterName,
+    SelectRepos,
+    Confirm,
+}
+
+/// Action pending confirmation.
+#[derive(Debug, Clone)]
+pub enum PendingAction {
+    TeardownWorkspace { name: String },
+}
+
+/// Messages that drive state transitions (TEA pattern).
+#[derive(Debug)]
+pub enum Message {
+    // Navigation
+    SelectNext,
+    SelectPrev,
+    Confirm,
+    Cancel,
+    Quit,
+
+    // Workspace list
+    OpenDetail,
+    StartNewWizard,
+    RefreshList,
+
+    // Workspace detail
+    TeardownWorkspace,
+
+    // Wizard
+    WizardCharInput(char),
+    WizardBackspace,
+    WizardNextStep,
+    ToggleRepo(usize),
+
+    // Confirm dialog
+    ConfirmYes,
+    ConfirmNo,
+
+    // Status
+    DismissStatus,
+}
+
+/// Severity of status bar messages.
+#[derive(Debug, Clone)]
+pub enum StatusLevel {
+    Info,
+    Error,
+}
+
+/// A status bar message with auto-dismiss.
+#[derive(Debug, Clone)]
+pub struct StatusMessage {
+    pub text: String,
+    pub level: StatusLevel,
+    pub created: Instant,
+}
+
+/// Top-level application state.
+pub struct App {
+    pub screen: Screen,
+    pub workspaces: Vec<WorkspaceSummary>,
+    pub selected: usize,
+    pub status: Option<StatusMessage>,
+    pub should_quit: bool,
+    pub config: Config,
+}
+
+impl App {
+    pub fn new(config: Config) -> Self {
+        Self {
+            screen: Screen::WorkspaceList,
+            workspaces: Vec::new(),
+            selected: 0,
+            status: None,
+            should_quit: false,
+            config,
+        }
+    }
+
+    /// Load workspace list from disk.
+    pub fn refresh_workspaces(&mut self) {
+        match crate::workspace::list::list_workspaces(&self.config) {
+            Ok(ws) => self.workspaces = ws,
+            Err(e) => self.set_status(
+                format!("Failed to load workspaces: {e}"),
+                StatusLevel::Error,
+            ),
+        }
+    }
+
+    fn set_status(&mut self, text: String, level: StatusLevel) {
+        self.status = Some(StatusMessage {
+            text,
+            level,
+            created: Instant::now(),
+        });
+    }
+
+    /// Auto-dismiss status messages after 5 seconds.
+    pub fn tick(&mut self) {
+        if let Some(ref status) = self.status
+            && status.created.elapsed().as_secs() >= 5
+        {
+            self.status = None;
+        }
+    }
+
+    /// Process a message and update state (TEA update function).
+    pub fn update(&mut self, msg: Message) {
+        match msg {
+            Message::Quit => {
+                self.should_quit = true;
+            }
+            Message::DismissStatus => {
+                self.status = None;
+            }
+            Message::RefreshList => {
+                self.refresh_workspaces();
+            }
+
+            // --- Workspace List ---
+            Message::SelectNext => match &mut self.screen {
+                Screen::WorkspaceList => {
+                    if !self.workspaces.is_empty() {
+                        self.selected = (self.selected + 1) % self.workspaces.len();
+                    }
+                }
+                Screen::WorkspaceDetail { .. } => {
+                    // Could scroll repo list in future
+                }
+                Screen::NewWizard {
+                    step: WizardStep::SelectRepos,
+                    available_repos,
+                    focused,
+                    ..
+                } => {
+                    if !available_repos.is_empty() {
+                        *focused = (*focused + 1) % available_repos.len();
+                    }
+                }
+                _ => {}
+            },
+            Message::SelectPrev => match &mut self.screen {
+                Screen::WorkspaceList => {
+                    if !self.workspaces.is_empty() {
+                        self.selected = self
+                            .selected
+                            .checked_sub(1)
+                            .unwrap_or(self.workspaces.len() - 1);
+                    }
+                }
+                Screen::NewWizard {
+                    step: WizardStep::SelectRepos,
+                    available_repos,
+                    focused,
+                    ..
+                } => {
+                    if !available_repos.is_empty() {
+                        *focused = focused.checked_sub(1).unwrap_or(available_repos.len() - 1);
+                    }
+                }
+                _ => {}
+            },
+            Message::OpenDetail | Message::Confirm => match &self.screen {
+                Screen::WorkspaceList => {
+                    if let Some(ws) = self.workspaces.get(self.selected) {
+                        self.screen = Screen::WorkspaceDetail {
+                            name: ws.name.clone(),
+                            path: ws.path.clone(),
+                        };
+                    }
+                }
+                Screen::ConfirmDialog { .. } => {
+                    self.update(Message::ConfirmYes);
+                }
+                _ => {}
+            },
+            Message::Cancel => match &self.screen {
+                Screen::WorkspaceDetail { .. } => {
+                    self.screen = Screen::WorkspaceList;
+                    self.refresh_workspaces();
+                }
+                Screen::NewWizard {
+                    step: WizardStep::EnterName,
+                    ..
+                } => {
+                    self.screen = Screen::WorkspaceList;
+                }
+                Screen::NewWizard {
+                    step: WizardStep::SelectRepos,
+                    name,
+                    available_repos,
+                    ..
+                } => {
+                    let name = name.clone();
+                    let repos = available_repos.clone();
+                    self.screen = Screen::NewWizard {
+                        step: WizardStep::EnterName,
+                        name,
+                        available_repos: repos,
+                        selected: HashSet::new(),
+                        focused: 0,
+                    };
+                }
+                Screen::NewWizard {
+                    step: WizardStep::Confirm,
+                    name,
+                    available_repos,
+                    selected,
+                    focused,
+                    ..
+                } => {
+                    let name = name.clone();
+                    let repos = available_repos.clone();
+                    let sel = selected.clone();
+                    let foc = *focused;
+                    self.screen = Screen::NewWizard {
+                        step: WizardStep::SelectRepos,
+                        name,
+                        available_repos: repos,
+                        selected: sel,
+                        focused: foc,
+                    };
+                }
+                Screen::ConfirmDialog { .. } => {
+                    self.screen = Screen::WorkspaceList;
+                    self.refresh_workspaces();
+                }
+                _ => {}
+            },
+
+            // --- Start new workspace wizard ---
+            Message::StartNewWizard => {
+                let repos = crate::registry::discover_repos(
+                    &self.config.registry.scan_roots,
+                    Some(&self.config.workspace.root),
+                );
+                self.screen = Screen::NewWizard {
+                    step: WizardStep::EnterName,
+                    name: String::new(),
+                    available_repos: repos,
+                    selected: HashSet::new(),
+                    focused: 0,
+                };
+            }
+
+            // --- Wizard input ---
+            Message::WizardCharInput(ch) => {
+                if let Screen::NewWizard {
+                    step: WizardStep::EnterName,
+                    name,
+                    ..
+                } = &mut self.screen
+                {
+                    // Only allow valid workspace name chars
+                    if ch.is_ascii_alphanumeric() || ch == '-' {
+                        name.push(ch);
+                    }
+                }
+            }
+            Message::WizardBackspace => {
+                if let Screen::NewWizard {
+                    step: WizardStep::EnterName,
+                    name,
+                    ..
+                } = &mut self.screen
+                {
+                    name.pop();
+                }
+            }
+            Message::WizardNextStep => {
+                let screen = std::mem::replace(&mut self.screen, Screen::WorkspaceList);
+                match screen {
+                    Screen::NewWizard {
+                        step: WizardStep::EnterName,
+                        name,
+                        available_repos,
+                        selected,
+                        focused,
+                    } => {
+                        if name.is_empty() {
+                            self.set_status(
+                                "Workspace name cannot be empty".to_string(),
+                                StatusLevel::Error,
+                            );
+                            self.screen = Screen::NewWizard {
+                                step: WizardStep::EnterName,
+                                name,
+                                available_repos,
+                                selected,
+                                focused,
+                            };
+                        } else {
+                            self.screen = Screen::NewWizard {
+                                step: WizardStep::SelectRepos,
+                                name,
+                                available_repos,
+                                selected,
+                                focused,
+                            };
+                        }
+                    }
+                    Screen::NewWizard {
+                        step: WizardStep::SelectRepos,
+                        name,
+                        available_repos,
+                        selected,
+                        focused,
+                    } => {
+                        if selected.is_empty() {
+                            self.set_status(
+                                "Select at least one repo".to_string(),
+                                StatusLevel::Error,
+                            );
+                            self.screen = Screen::NewWizard {
+                                step: WizardStep::SelectRepos,
+                                name,
+                                available_repos,
+                                selected,
+                                focused,
+                            };
+                        } else {
+                            self.screen = Screen::NewWizard {
+                                step: WizardStep::Confirm,
+                                name,
+                                available_repos,
+                                selected,
+                                focused,
+                            };
+                        }
+                    }
+                    Screen::NewWizard {
+                        step: WizardStep::Confirm,
+                        name,
+                        available_repos,
+                        selected,
+                        ..
+                    } => {
+                        // Execute workspace creation
+                        let repos: Vec<RepoEntry> = selected
+                            .iter()
+                            .filter_map(|&i| available_repos.get(i).cloned())
+                            .collect();
+                        match crate::workspace::new::create_workspace(
+                            &self.config,
+                            crate::workspace::new::NewWorkspaceOpts {
+                                name: name.clone(),
+                                repos,
+                                base_branch: None,
+                            },
+                        ) {
+                            Ok(result) => {
+                                self.set_status(
+                                    format!(
+                                        "Created '{}' with {} repo(s)",
+                                        result.name, result.repos_added
+                                    ),
+                                    StatusLevel::Info,
+                                );
+                                self.screen = Screen::WorkspaceList;
+                                self.refresh_workspaces();
+                            }
+                            Err(e) => {
+                                self.set_status(
+                                    format!("Failed to create workspace: {e}"),
+                                    StatusLevel::Error,
+                                );
+                                self.screen = Screen::WorkspaceList;
+                            }
+                        }
+                    }
+                    other => {
+                        self.screen = other;
+                    }
+                }
+            }
+            Message::ToggleRepo(idx) => {
+                if let Screen::NewWizard {
+                    step: WizardStep::SelectRepos,
+                    selected,
+                    ..
+                } = &mut self.screen
+                {
+                    if selected.contains(&idx) {
+                        selected.remove(&idx);
+                    } else {
+                        selected.insert(idx);
+                    }
+                }
+            }
+
+            // --- Workspace detail actions ---
+            Message::TeardownWorkspace => {
+                if let Screen::WorkspaceDetail { name, .. } = &self.screen {
+                    let ws_name = name.clone();
+                    self.screen = Screen::ConfirmDialog {
+                        message: format!(
+                            "Tear down workspace '{ws_name}'? This removes all worktrees."
+                        ),
+                        action: PendingAction::TeardownWorkspace { name: ws_name },
+                    };
+                }
+            }
+
+            // --- Confirm dialog ---
+            Message::ConfirmYes => {
+                let screen = std::mem::replace(&mut self.screen, Screen::WorkspaceList);
+                if let Screen::ConfirmDialog { action, .. } = screen {
+                    match action {
+                        PendingAction::TeardownWorkspace { name } => {
+                            self.execute_teardown(&name);
+                        }
+                    }
+                }
+                self.refresh_workspaces();
+            }
+            Message::ConfirmNo => {
+                // Go back to where we came from
+                self.screen = Screen::WorkspaceList;
+                self.refresh_workspaces();
+            }
+        }
+    }
+
+    fn execute_teardown(&mut self, name: &str) {
+        let cwd = match std::env::current_dir() {
+            Ok(c) => c,
+            Err(e) => {
+                self.set_status(format!("Cannot get cwd: {e}"), StatusLevel::Error);
+                return;
+            }
+        };
+
+        let (ws_path, mut manifest) =
+            match crate::workspace::resolve_workspace(Some(name), &cwd, &self.config) {
+                Ok(r) => r,
+                Err(e) => {
+                    self.set_status(format!("Cannot find workspace: {e}"), StatusLevel::Error);
+                    return;
+                }
+            };
+
+        let all_repos: Vec<String> = manifest.repos.iter().map(|r| r.name.clone()).collect();
+        match crate::workspace::down::teardown_workspace(
+            &self.config,
+            &ws_path,
+            &mut manifest,
+            &all_repos,
+            false,
+        ) {
+            Ok(result) => {
+                let msg = format!(
+                    "Torn down '{}': {} removed, {} failed",
+                    name,
+                    result.removed.len(),
+                    result.failed.len()
+                );
+                self.set_status(msg, StatusLevel::Info);
+            }
+            Err(e) => {
+                self.set_status(format!("Teardown failed: {e}"), StatusLevel::Error);
+            }
+        }
+    }
+
+    /// Get detail info for the currently viewed workspace.
+    pub fn workspace_detail_status(&self) -> Option<crate::workspace::status::WorkspaceStatus> {
+        if let Screen::WorkspaceDetail { name, .. } = &self.screen {
+            let cwd = std::env::current_dir().ok()?;
+            let (ws_path, manifest) =
+                crate::workspace::resolve_workspace(Some(name), &cwd, &self.config).ok()?;
+            crate::workspace::status::workspace_status(&manifest, &ws_path, false).ok()
+        } else {
+            None
+        }
+    }
+
+    /// Color for workspace health status.
+    pub fn health_color(health: &WorkspaceHealth) -> ratatui::style::Color {
+        use ratatui::style::Color;
+        match health {
+            WorkspaceHealth::Clean => Color::Green,
+            WorkspaceHealth::Dirty(_) => Color::Yellow,
+            WorkspaceHealth::Broken(_) => Color::Red,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{AgentsConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
+    use std::path::PathBuf;
+
+    fn test_config(dir: &std::path::Path) -> Config {
+        let ws_root = dir.join("loom");
+        std::fs::create_dir_all(ws_root.join(".loom")).unwrap();
+        Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig { root: ws_root },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig::default(),
+        }
+    }
+
+    #[test]
+    fn test_app_initial_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let app = App::new(config);
+
+        assert!(!app.should_quit);
+        assert!(app.workspaces.is_empty());
+        assert_eq!(app.selected, 0);
+        assert!(matches!(app.screen, Screen::WorkspaceList));
+    }
+
+    #[test]
+    fn test_quit_message() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let mut app = App::new(config);
+
+        app.update(Message::Quit);
+        assert!(app.should_quit);
+    }
+
+    #[test]
+    fn test_select_navigation_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let mut app = App::new(config);
+
+        // Should not panic on empty list
+        app.update(Message::SelectNext);
+        assert_eq!(app.selected, 0);
+        app.update(Message::SelectPrev);
+        assert_eq!(app.selected, 0);
+    }
+
+    #[test]
+    fn test_status_dismiss() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let mut app = App::new(config);
+
+        app.set_status("test".to_string(), StatusLevel::Info);
+        assert!(app.status.is_some());
+
+        app.update(Message::DismissStatus);
+        assert!(app.status.is_none());
+    }
+
+    #[test]
+    fn test_wizard_name_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let mut app = App::new(config);
+
+        app.screen = Screen::NewWizard {
+            step: WizardStep::EnterName,
+            name: String::new(),
+            available_repos: vec![],
+            selected: HashSet::new(),
+            focused: 0,
+        };
+
+        app.update(Message::WizardCharInput('m'));
+        app.update(Message::WizardCharInput('y'));
+        app.update(Message::WizardCharInput('-'));
+        app.update(Message::WizardCharInput('w'));
+        app.update(Message::WizardCharInput('s'));
+
+        if let Screen::NewWizard { name, .. } = &app.screen {
+            assert_eq!(name, "my-ws");
+        } else {
+            panic!("Expected NewWizard screen");
+        }
+
+        app.update(Message::WizardBackspace);
+        if let Screen::NewWizard { name, .. } = &app.screen {
+            assert_eq!(name, "my-w");
+        } else {
+            panic!("Expected NewWizard screen");
+        }
+    }
+
+    #[test]
+    fn test_wizard_rejects_empty_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let mut app = App::new(config);
+
+        app.screen = Screen::NewWizard {
+            step: WizardStep::EnterName,
+            name: String::new(),
+            available_repos: vec![],
+            selected: HashSet::new(),
+            focused: 0,
+        };
+
+        app.update(Message::WizardNextStep);
+
+        // Should stay on EnterName with an error status
+        assert!(matches!(
+            &app.screen,
+            Screen::NewWizard {
+                step: WizardStep::EnterName,
+                ..
+            }
+        ));
+        assert!(app.status.is_some());
+    }
+
+    #[test]
+    fn test_cancel_from_detail_returns_to_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let mut app = App::new(config);
+
+        app.screen = Screen::WorkspaceDetail {
+            name: "test".to_string(),
+            path: PathBuf::from("/tmp/test"),
+        };
+
+        app.update(Message::Cancel);
+        assert!(matches!(app.screen, Screen::WorkspaceList));
+    }
+}
