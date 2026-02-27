@@ -77,13 +77,26 @@ fn map_key_to_message(key: KeyCode, screen: &Screen) -> Option<Message> {
                 KeyCode::Char(ch) => Some(Message::WizardCharInput(ch)),
                 _ => None,
             },
+            WizardStep::SelectGroups => match key {
+                KeyCode::Esc => Some(Message::Cancel),
+                KeyCode::Enter => Some(Message::WizardNextStep),
+                KeyCode::Char('j') | KeyCode::Down => Some(Message::SelectNext),
+                KeyCode::Char('k') | KeyCode::Up => Some(Message::SelectPrev),
+                KeyCode::Char(' ') => {
+                    if let Screen::NewWizard { focused, .. } = screen {
+                        Some(Message::ToggleRepo(*focused))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
             WizardStep::SelectRepos => match key {
                 KeyCode::Esc => Some(Message::Cancel),
                 KeyCode::Enter => Some(Message::WizardNextStep),
                 KeyCode::Char('j') | KeyCode::Down => Some(Message::SelectNext),
                 KeyCode::Char('k') | KeyCode::Up => Some(Message::SelectPrev),
                 KeyCode::Char(' ') => {
-                    // Toggle the currently focused repo
                     if let Screen::NewWizard { focused, .. } = screen {
                         Some(Message::ToggleRepo(*focused))
                     } else {
@@ -143,6 +156,8 @@ mod tests {
             step: WizardStep::EnterName,
             name: String::new(),
             available_repos: vec![],
+            groups: vec![],
+            selected_groups: std::collections::HashSet::new(),
             selected: std::collections::HashSet::new(),
             focused: 0,
         };

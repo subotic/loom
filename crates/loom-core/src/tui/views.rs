@@ -183,6 +183,8 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
         step,
         name,
         available_repos,
+        groups,
+        selected_groups,
         selected,
         focused,
     } = &app.screen
@@ -217,6 +219,57 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
                 .style(Style::default().fg(Color::DarkGray));
             frame.render_widget(hint, hint_area);
         }
+        WizardStep::SelectGroups => {
+            let [prompt_area, list_area, hint_area] = Layout::vertical([
+                Constraint::Length(2),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
+            .areas(inner);
+
+            let prompt = Paragraph::new(format!(
+                "Select org groups for '{}' (Space to toggle, Enter to confirm):",
+                name
+            ));
+            frame.render_widget(prompt, prompt_area);
+
+            // Count repos per group for display
+            let rows: Vec<Row> = groups
+                .iter()
+                .enumerate()
+                .map(|(i, group)| {
+                    let repo_count = available_repos.iter().filter(|r| r.org == *group).count();
+                    let marker = if selected_groups.contains(&i) {
+                        "[x]"
+                    } else {
+                        "[ ]"
+                    };
+                    let style = if i == *focused {
+                        Style::default().add_modifier(Modifier::REVERSED)
+                    } else {
+                        Style::default()
+                    };
+                    Row::new(vec![
+                        Cell::new(marker),
+                        Cell::new(group.clone()),
+                        Cell::new(format!("({repo_count} repos)")),
+                    ])
+                    .style(style)
+                })
+                .collect();
+
+            let widths = [
+                Constraint::Length(4),
+                Constraint::Min(20),
+                Constraint::Length(12),
+            ];
+            let table = Table::new(rows, widths);
+            frame.render_widget(table, list_area);
+
+            let hint = Paragraph::new("Space: toggle  Enter: confirm  Esc: back")
+                .style(Style::default().fg(Color::DarkGray));
+            frame.render_widget(hint, hint_area);
+        }
         WizardStep::SelectRepos => {
             let [prompt_area, list_area, hint_area] = Layout::vertical([
                 Constraint::Length(2),
@@ -231,13 +284,20 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
             ));
             frame.render_widget(prompt, prompt_area);
 
-            // Repo multi-select list
-            let rows: Vec<Row> = available_repos
+            // Show only repos from selected groups
+            let visible_indices =
+                App::filtered_repo_indices(available_repos, selected_groups, groups);
+            let rows: Vec<Row> = visible_indices
                 .iter()
                 .enumerate()
-                .map(|(i, repo)| {
-                    let marker = if selected.contains(&i) { "[x]" } else { "[ ]" };
-                    let style = if i == *focused {
+                .map(|(display_idx, &repo_idx)| {
+                    let repo = &available_repos[repo_idx];
+                    let marker = if selected.contains(&repo_idx) {
+                        "[x]"
+                    } else {
+                        "[ ]"
+                    };
+                    let style = if display_idx == *focused {
                         Style::default().add_modifier(Modifier::REVERSED)
                     } else {
                         Style::default()
@@ -326,6 +386,7 @@ fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
             Screen::WorkspaceDetail { .. } => "Esc:back  d:teardown",
             Screen::NewWizard { step, .. } => match step {
                 WizardStep::EnterName => "Enter:next  Esc:cancel",
+                WizardStep::SelectGroups => "Space:toggle  Enter:confirm  Esc:back",
                 WizardStep::SelectRepos => "Space:toggle  Enter:confirm  Esc:back",
                 WizardStep::Confirm => "Enter:create  Esc:back",
             },

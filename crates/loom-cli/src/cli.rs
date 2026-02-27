@@ -558,8 +558,32 @@ impl Cli {
                 matched
             }
             None => {
-                // Interactive: MultiSelect
-                let labels: Vec<String> = all_repos
+                // Interactive: two-step selection (orgs → repos)
+
+                // Extract unique org names (already sorted from discover_repos)
+                let mut orgs: Vec<String> = all_repos.iter().map(|r| r.org.clone()).collect();
+                orgs.dedup();
+
+                // Step 1: Select orgs (skip if only one)
+                let selected_orgs: Vec<String> = if orgs.len() == 1 {
+                    orgs
+                } else {
+                    let selections = MultiSelect::new()
+                        .with_prompt("Select org groups")
+                        .items(&orgs)
+                        .interact()?;
+                    if selections.is_empty() {
+                        anyhow::bail!("No org groups selected.");
+                    }
+                    selections.into_iter().map(|i| orgs[i].clone()).collect()
+                };
+
+                // Step 2: Filter repos to selected orgs, then pick repos
+                let filtered: Vec<&loom_core::registry::RepoEntry> = all_repos
+                    .iter()
+                    .filter(|r| selected_orgs.contains(&r.org))
+                    .collect();
+                let labels: Vec<String> = filtered
                     .iter()
                     .map(|r| format!("{}/{}", r.org, r.name))
                     .collect();
@@ -572,7 +596,7 @@ impl Cli {
                 }
                 selections
                     .into_iter()
-                    .map(|i| all_repos[i].clone())
+                    .map(|i| filtered[i].clone())
                     .collect()
             }
         };
