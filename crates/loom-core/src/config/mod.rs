@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// Top-level LOOM configuration, stored at ~/.config/loom/config.toml
@@ -68,20 +68,25 @@ impl Config {
         let path = Self::path()?;
         if !path.exists() {
             anyhow::bail!(
-                "Configuration not found. Run `loom init` first to set up your configuration."
+                "Configuration not found at {}. Run `loom init` to create a config file.",
+                path.display()
             );
         }
-        let content = std::fs::read_to_string(&path)?;
-        let config: Config = toml::from_str(&content)?;
+        let content = std::fs::read_to_string(&path)
+            .with_context(|| format!("Failed to read config at {}", path.display()))?;
+        let config: Config = toml::from_str(&content)
+            .with_context(|| format!("Failed to parse config at {}", path.display()))?;
         Ok(config)
     }
 
-    /// Path to the config file
+    /// Path to the config file: ~/.config/loom/config.toml
+    ///
+    /// Hardcoded to ~/.config/loom/ for cross-platform consistency.
+    /// This matches developer tool conventions (ripgrep, bat, starship)
+    /// and avoids the `directories` crate's macOS path (~Library/Application Support/).
     pub fn path() -> Result<PathBuf> {
-        let dirs =
-            directories::ProjectDirs::from("", "", "loom").ok_or_else(|| {
-                anyhow::anyhow!("Could not determine config directory")
-            })?;
-        Ok(dirs.config_dir().join("config.toml"))
+        let home = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+        Ok(home.join(".config").join("loom").join("config.toml"))
     }
 }
