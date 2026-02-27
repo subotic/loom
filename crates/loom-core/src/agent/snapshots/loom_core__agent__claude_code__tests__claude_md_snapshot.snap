@@ -1,0 +1,24 @@
+---
+source: crates/loom-core/src/agent/claude_code.rs
+assertion_line: 130
+expression: content
+---
+# LOOM Workspace: my-feature
+
+This workspace was created by [LOOM](https://github.com/subotic/loom) and contains linked worktrees for multi-repo development.
+
+## Repositories
+
+| Directory | Branch | Source |
+|-----------|--------|--------|
+| `dsp-api` | `loom/my-feature` | git@github.com:dasch-swiss/dsp-api.git |
+| `dsp-das` | `loom/my-feature` | git@github.com:dasch-swiss/dsp-das.git |
+
+## Working in this workspace
+
+- Each subdirectory is a git worktree checked out on the workspace branch.
+- Changes in one repo's worktree do not affect the original repo until pushed.
+- Each repo may have its own `CLAUDE.md` with repo-specific context.
+- Use `loom exec <cmd>` to run a command across all repos.
+- Use `loom save` to push all branches.
+- Use `loom status` to see per-repo branch and dirty state.

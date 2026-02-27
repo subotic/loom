@@ -78,6 +78,9 @@ pub fn remove_repo(
     });
     manifest::write_global_state(&state_path, &state)?;
 
+    // Regenerate agent files (CLAUDE.md, .claude/settings.local.json)
+    crate::agent::generate_agent_files(config, ws_path, manifest)?;
+
     Ok(())
 }
 

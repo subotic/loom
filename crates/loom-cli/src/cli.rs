@@ -359,6 +359,7 @@ impl Cli {
 
         add_repo(&config, &ws_path, &mut manifest, repo)?;
         println!("Added '{}' to workspace '{}'.", repo_name, manifest.name);
+        println!("Hint: Restart Claude Code to pick up the new repo.");
 
         Ok(())
     }
@@ -378,6 +379,7 @@ impl Cli {
             "Removed '{}' from workspace '{}'.",
             repo_name, manifest.name
         );
+        println!("Hint: Restart Claude Code to pick up the change.");
 
         Ok(())
     }
@@ -598,6 +600,10 @@ impl Cli {
                 eprintln!("    {}: {}", name, err);
             }
         }
+
+        println!(
+            "\n  Hint: If using Claude Code, restart it in this workspace to pick up the new repos."
+        );
 
         Ok(())
     }

@@ -110,6 +110,9 @@ pub fn teardown_workspace(
             repo_count: manifest.repos.len(),
         });
         manifest::write_global_state(&state_path, &state)?;
+
+        // Regenerate agent files for remaining repos
+        crate::agent::generate_agent_files(config, ws_path, manifest)?;
     }
 
     Ok(TeardownResult {
@@ -180,7 +183,7 @@ mod tests {
                 "worktree",
                 "add",
                 "-b",
-                &format!("loom/test-ws"),
+                "loom/test-ws",
                 &wt_path.to_string_lossy(),
             ])
             .env("LC_ALL", "C")
