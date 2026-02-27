@@ -124,6 +124,9 @@ pub fn discover_repos(scan_roots: &[PathBuf], workspace_root: Option<&Path>) -> 
     // Handle name collisions: disambiguate repos with the same basename
     disambiguate_names(&mut entries);
 
+    // Sort by (org, name) for consistent ordering
+    entries.sort_by(|a, b| (&a.org, &a.name).cmp(&(&b.org, &b.name)));
+
     entries
 }
 

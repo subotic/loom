@@ -18,6 +18,11 @@ pub enum Screen {
         step: WizardStep,
         name: String,
         available_repos: Vec<RepoEntry>,
+        /// Unique org names extracted from available_repos (sorted).
+        groups: Vec<String>,
+        /// Indices into `groups` that are selected.
+        selected_groups: HashSet<usize>,
+        /// Indices into `available_repos` that are selected.
         selected: HashSet<usize>,
         focused: usize,
     },
@@ -31,6 +36,7 @@ pub enum Screen {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WizardStep {
     EnterName,
+    SelectGroups,
     SelectRepos,
     Confirm,
 }
@@ -162,13 +168,27 @@ impl App {
                     // Could scroll repo list in future
                 }
                 Screen::NewWizard {
-                    step: WizardStep::SelectRepos,
-                    available_repos,
+                    step: WizardStep::SelectGroups,
+                    groups,
                     focused,
                     ..
                 } => {
-                    if !available_repos.is_empty() {
-                        *focused = (*focused + 1) % available_repos.len();
+                    if !groups.is_empty() {
+                        *focused = (*focused + 1) % groups.len();
+                    }
+                }
+                Screen::NewWizard {
+                    step: WizardStep::SelectRepos,
+                    available_repos,
+                    selected_groups,
+                    groups,
+                    focused,
+                    ..
+                } => {
+                    let visible_count =
+                        Self::filtered_repo_count(available_repos, selected_groups, groups);
+                    if visible_count > 0 {
+                        *focused = (*focused + 1) % visible_count;
                     }
                 }
                 _ => {}
@@ -183,13 +203,27 @@ impl App {
                     }
                 }
                 Screen::NewWizard {
-                    step: WizardStep::SelectRepos,
-                    available_repos,
+                    step: WizardStep::SelectGroups,
+                    groups,
                     focused,
                     ..
                 } => {
-                    if !available_repos.is_empty() {
-                        *focused = focused.checked_sub(1).unwrap_or(available_repos.len() - 1);
+                    if !groups.is_empty() {
+                        *focused = focused.checked_sub(1).unwrap_or(groups.len() - 1);
+                    }
+                }
+                Screen::NewWizard {
+                    step: WizardStep::SelectRepos,
+                    available_repos,
+                    selected_groups,
+                    groups,
+                    focused,
+                    ..
+                } => {
+                    let visible_count =
+                        Self::filtered_repo_count(available_repos, selected_groups, groups);
+                    if visible_count > 0 {
+                        *focused = focused.checked_sub(1).unwrap_or(visible_count - 1);
                     }
                 }
                 _ => {}
@@ -220,17 +254,43 @@ impl App {
                     self.screen = Screen::WorkspaceList;
                 }
                 Screen::NewWizard {
-                    step: WizardStep::SelectRepos,
+                    step: WizardStep::SelectGroups,
                     name,
                     available_repos,
+                    groups,
                     ..
                 } => {
                     let name = name.clone();
                     let repos = available_repos.clone();
+                    let groups = groups.clone();
                     self.screen = Screen::NewWizard {
                         step: WizardStep::EnterName,
                         name,
                         available_repos: repos,
+                        groups,
+                        selected_groups: HashSet::new(),
+                        selected: HashSet::new(),
+                        focused: 0,
+                    };
+                }
+                Screen::NewWizard {
+                    step: WizardStep::SelectRepos,
+                    name,
+                    available_repos,
+                    groups,
+                    selected_groups,
+                    ..
+                } => {
+                    let name = name.clone();
+                    let repos = available_repos.clone();
+                    let groups = groups.clone();
+                    let sel_groups = selected_groups.clone();
+                    self.screen = Screen::NewWizard {
+                        step: WizardStep::SelectGroups,
+                        name,
+                        available_repos: repos,
+                        groups,
+                        selected_groups: sel_groups,
                         selected: HashSet::new(),
                         focused: 0,
                     };
@@ -239,18 +299,24 @@ impl App {
                     step: WizardStep::Confirm,
                     name,
                     available_repos,
+                    groups,
+                    selected_groups,
                     selected,
                     focused,
                     ..
                 } => {
                     let name = name.clone();
                     let repos = available_repos.clone();
+                    let groups = groups.clone();
+                    let sel_groups = selected_groups.clone();
                     let sel = selected.clone();
                     let foc = *focused;
                     self.screen = Screen::NewWizard {
                         step: WizardStep::SelectRepos,
                         name,
                         available_repos: repos,
+                        groups,
+                        selected_groups: sel_groups,
                         selected: sel,
                         focused: foc,
                     };
@@ -268,10 +334,15 @@ impl App {
                     &self.config.registry.scan_roots,
                     Some(&self.config.workspace.root),
                 );
+                // Extract unique org names (repos already sorted by org, name)
+                let mut groups: Vec<String> = repos.iter().map(|r| r.org.clone()).collect();
+                groups.dedup();
                 self.screen = Screen::NewWizard {
                     step: WizardStep::EnterName,
                     name: String::new(),
                     available_repos: repos,
+                    groups,
+                    selected_groups: HashSet::new(),
                     selected: HashSet::new(),
                     focused: 0,
                 };
@@ -308,6 +379,8 @@ impl App {
                         step: WizardStep::EnterName,
                         name,
                         available_repos,
+                        groups,
+                        selected_groups,
                         selected,
                         focused,
                     } => {
@@ -320,16 +393,66 @@ impl App {
                                 step: WizardStep::EnterName,
                                 name,
                                 available_repos,
+                                groups,
+                                selected_groups,
                                 selected,
                                 focused,
+                            };
+                        } else if groups.len() <= 1 {
+                            // Only one org — skip group selection, auto-select it
+                            let all_selected: HashSet<usize> = (0..groups.len()).collect();
+                            self.screen = Screen::NewWizard {
+                                step: WizardStep::SelectRepos,
+                                name,
+                                available_repos,
+                                groups,
+                                selected_groups: all_selected,
+                                selected,
+                                focused: 0,
+                            };
+                        } else {
+                            self.screen = Screen::NewWizard {
+                                step: WizardStep::SelectGroups,
+                                name,
+                                available_repos,
+                                groups,
+                                selected_groups,
+                                selected,
+                                focused: 0,
+                            };
+                        }
+                    }
+                    Screen::NewWizard {
+                        step: WizardStep::SelectGroups,
+                        name,
+                        available_repos,
+                        groups,
+                        selected_groups,
+                        ..
+                    } => {
+                        if selected_groups.is_empty() {
+                            self.set_status(
+                                "Select at least one group".to_string(),
+                                StatusLevel::Error,
+                            );
+                            self.screen = Screen::NewWizard {
+                                step: WizardStep::SelectGroups,
+                                name,
+                                available_repos,
+                                groups,
+                                selected_groups,
+                                selected: HashSet::new(),
+                                focused: 0,
                             };
                         } else {
                             self.screen = Screen::NewWizard {
                                 step: WizardStep::SelectRepos,
                                 name,
                                 available_repos,
-                                selected,
-                                focused,
+                                groups,
+                                selected_groups,
+                                selected: HashSet::new(),
+                                focused: 0,
                             };
                         }
                     }
@@ -337,6 +460,8 @@ impl App {
                         step: WizardStep::SelectRepos,
                         name,
                         available_repos,
+                        groups,
+                        selected_groups,
                         selected,
                         focused,
                     } => {
@@ -349,6 +474,8 @@ impl App {
                                 step: WizardStep::SelectRepos,
                                 name,
                                 available_repos,
+                                groups,
+                                selected_groups,
                                 selected,
                                 focused,
                             };
@@ -357,6 +484,8 @@ impl App {
                                 step: WizardStep::Confirm,
                                 name,
                                 available_repos,
+                                groups,
+                                selected_groups,
                                 selected,
                                 focused,
                             };
@@ -408,17 +537,38 @@ impl App {
                 }
             }
             Message::ToggleRepo(idx) => {
-                if let Screen::NewWizard {
-                    step: WizardStep::SelectRepos,
-                    selected,
-                    ..
-                } = &mut self.screen
-                {
-                    if selected.contains(&idx) {
-                        selected.remove(&idx);
-                    } else {
-                        selected.insert(idx);
+                match &mut self.screen {
+                    Screen::NewWizard {
+                        step: WizardStep::SelectGroups,
+                        selected_groups,
+                        ..
+                    } => {
+                        if selected_groups.contains(&idx) {
+                            selected_groups.remove(&idx);
+                        } else {
+                            selected_groups.insert(idx);
+                        }
                     }
+                    Screen::NewWizard {
+                        step: WizardStep::SelectRepos,
+                        available_repos,
+                        groups,
+                        selected_groups,
+                        selected,
+                        ..
+                    } => {
+                        // idx is display index into filtered list — map to original repo index
+                        let visible =
+                            Self::filtered_repo_indices(available_repos, selected_groups, groups);
+                        if let Some(&repo_idx) = visible.get(idx) {
+                            if selected.contains(&repo_idx) {
+                                selected.remove(&repo_idx);
+                            } else {
+                                selected.insert(repo_idx);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
 
@@ -453,6 +603,33 @@ impl App {
                 self.refresh_workspaces();
             }
         }
+    }
+
+    /// Count repos visible after group filtering.
+    fn filtered_repo_count(
+        repos: &[RepoEntry],
+        selected_groups: &HashSet<usize>,
+        groups: &[String],
+    ) -> usize {
+        Self::filtered_repo_indices(repos, selected_groups, groups).len()
+    }
+
+    /// Get the original indices of repos that belong to selected groups.
+    pub fn filtered_repo_indices(
+        repos: &[RepoEntry],
+        selected_groups: &HashSet<usize>,
+        groups: &[String],
+    ) -> Vec<usize> {
+        let selected_org_names: HashSet<&str> = selected_groups
+            .iter()
+            .filter_map(|&i| groups.get(i).map(|s| s.as_str()))
+            .collect();
+        repos
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| selected_org_names.contains(r.org.as_str()))
+            .map(|(i, _)| i)
+            .collect()
     }
 
     fn execute_teardown(&mut self, name: &str) {
@@ -596,6 +773,8 @@ mod tests {
             step: WizardStep::EnterName,
             name: String::new(),
             available_repos: vec![],
+            groups: vec![],
+            selected_groups: HashSet::new(),
             selected: HashSet::new(),
             focused: 0,
         };
@@ -630,6 +809,8 @@ mod tests {
             step: WizardStep::EnterName,
             name: String::new(),
             available_repos: vec![],
+            groups: vec![],
+            selected_groups: HashSet::new(),
             selected: HashSet::new(),
             focused: 0,
         };
