@@ -852,7 +852,9 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_complete",
+ "dialoguer",
  "loom-core",
+ "shellexpand",
 ]
 
 [[package]]

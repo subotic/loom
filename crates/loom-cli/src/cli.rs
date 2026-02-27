@@ -230,19 +230,105 @@ impl Cli {
         Ok(())
     }
 
+    fn run_new(
+        name: String,
+        base: Option<String>,
+        repos_filter: Option<Vec<String>>,
+    ) -> anyhow::Result<()> {
+        use dialoguer::MultiSelect;
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::registry;
+        use loom_core::workspace::new::{NewWorkspaceOpts, create_workspace};
+
+        let config = ensure_config_loaded()?;
+
+        // Discover all repos
+        let all_repos =
+            registry::discover_repos(&config.registry.scan_roots, Some(&config.workspace.root));
+        if all_repos.is_empty() {
+            anyhow::bail!(
+                "No repositories found in scan roots. Check your config scan_roots paths."
+            );
+        }
+
+        // Select repos: --repos flag (non-interactive) or dialoguer MultiSelect (interactive)
+        let selected_repos = match repos_filter {
+            Some(names) => {
+                // Non-interactive: match by name
+                let mut matched: Vec<loom_core::registry::RepoEntry> = Vec::new();
+                for req_name in &names {
+                    let found = all_repos.iter().find(|r| {
+                        r.name == *req_name || format!("{}/{}", r.org, r.name) == *req_name
+                    });
+                    match found {
+                        Some(r) => matched.push(r.clone()),
+                        None => anyhow::bail!(
+                            "Repository '{}' not found. Available: {}",
+                            req_name,
+                            all_repos
+                                .iter()
+                                .map(|r| format!("{}/{}", r.org, r.name))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    }
+                }
+                matched
+            }
+            None => {
+                // Interactive: MultiSelect
+                let labels: Vec<String> = all_repos
+                    .iter()
+                    .map(|r| format!("{}/{}", r.org, r.name))
+                    .collect();
+                let selections = MultiSelect::new()
+                    .with_prompt("Select repositories for this workspace")
+                    .items(&labels)
+                    .interact()?;
+                if selections.is_empty() {
+                    anyhow::bail!("No repositories selected.");
+                }
+                selections
+                    .into_iter()
+                    .map(|i| all_repos[i].clone())
+                    .collect()
+            }
+        };
+
+        let result = create_workspace(
+            &config,
+            NewWorkspaceOpts {
+                name,
+                repos: selected_repos,
+                base_branch: base,
+            },
+        )?;
+
+        // Report results
+        println!(
+            "Workspace '{}' created at {}",
+            result.name,
+            result.path.display()
+        );
+        println!("  {} repo(s) added", result.repos_added);
+
+        if !result.repos_failed.is_empty() {
+            eprintln!("  {} repo(s) failed:", result.repos_failed.len());
+            for (name, err) in &result.repos_failed {
+                eprintln!("    {}: {}", name, err);
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn run(self) -> anyhow::Result<()> {
         match self.command {
             Command::Init => {
                 self.run_init()?;
             }
             Command::New { name, base, repos } => {
-                println!("loom new {name} — not yet implemented");
-                if let Some(b) = base {
-                    println!("  --base {b}");
-                }
-                if let Some(r) = repos {
-                    println!("  --repos {}", r.join(","));
-                }
+                Self::run_new(name, base, repos)?;
             }
             Command::Add { repo, workspace } => {
                 println!("loom add {repo} — not yet implemented");
