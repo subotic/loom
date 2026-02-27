@@ -608,6 +608,15 @@ impl Cli {
         Ok(())
     }
 
+    fn run_tui() -> anyhow::Result<()> {
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::tui::run_tui;
+
+        let config = ensure_config_loaded()?;
+        run_tui(config)?;
+        Ok(())
+    }
+
     fn run_save(force: bool) -> anyhow::Result<()> {
         use loom_core::config::ensure_config_loaded;
         use loom_core::sync::save::save_workspace;
@@ -716,7 +725,7 @@ impl Cli {
                 Self::run_open(name)?;
             }
             Command::Tui => {
-                println!("loom tui — not yet implemented");
+                Self::run_tui()?;
             }
             Command::Down { name, force } => {
                 Self::run_down(name, force)?;
