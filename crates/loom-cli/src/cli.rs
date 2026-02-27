@@ -327,6 +327,137 @@ impl Cli {
         Ok(())
     }
 
+    fn run_add(repo_name: String, workspace_name: Option<String>) -> anyhow::Result<()> {
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::registry;
+        use loom_core::workspace;
+        use loom_core::workspace::add::add_repo;
+
+        let config = ensure_config_loaded()?;
+        let cwd = std::env::current_dir()?;
+
+        let (ws_path, mut manifest) =
+            workspace::resolve_workspace(workspace_name.as_deref(), &cwd, &config)?;
+
+        // Find the repo in registry
+        let all_repos =
+            registry::discover_repos(&config.registry.scan_roots, Some(&config.workspace.root));
+        let repo = all_repos
+            .iter()
+            .find(|r| r.name == repo_name || format!("{}/{}", r.org, r.name) == repo_name)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Repository '{}' not found in registry. Available: {}",
+                    repo_name,
+                    all_repos
+                        .iter()
+                        .map(|r| format!("{}/{}", r.org, r.name))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+
+        add_repo(&config, &ws_path, &mut manifest, repo)?;
+        println!("Added '{}' to workspace '{}'.", repo_name, manifest.name);
+
+        Ok(())
+    }
+
+    fn run_remove(repo_name: String, force: bool) -> anyhow::Result<()> {
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::workspace;
+        use loom_core::workspace::remove::remove_repo;
+
+        let config = ensure_config_loaded()?;
+        let cwd = std::env::current_dir()?;
+
+        let (ws_path, mut manifest) = workspace::resolve_workspace(None, &cwd, &config)?;
+
+        remove_repo(&config, &ws_path, &mut manifest, &repo_name, force)?;
+        println!(
+            "Removed '{}' from workspace '{}'.",
+            repo_name, manifest.name
+        );
+
+        Ok(())
+    }
+
+    fn run_down(name: Option<String>, force: bool) -> anyhow::Result<()> {
+        use dialoguer::Confirm;
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::workspace;
+        use loom_core::workspace::down::{check_workspace, teardown_workspace};
+
+        let config = ensure_config_loaded()?;
+        let cwd = std::env::current_dir()?;
+
+        let (ws_path, mut manifest) = workspace::resolve_workspace(name.as_deref(), &cwd, &config)?;
+
+        let check = check_workspace(&manifest);
+
+        // Show summary
+        if !check.clean_repos.is_empty() {
+            println!(
+                "Clean repos (will remove): {}",
+                check.clean_repos.join(", ")
+            );
+        }
+        if !check.dirty_repos.is_empty() {
+            println!("Dirty repos:");
+            for (name, count) in &check.dirty_repos {
+                println!("  {} ({} changes)", name, count);
+            }
+        }
+        if !check.missing_repos.is_empty() {
+            println!(
+                "Missing repos (already gone): {}",
+                check.missing_repos.join(", ")
+            );
+        }
+
+        // Determine repos to remove
+        let mut repos_to_remove: Vec<String> = check.clean_repos.clone();
+        repos_to_remove.extend(check.missing_repos.clone());
+
+        if !check.dirty_repos.is_empty() {
+            if force {
+                repos_to_remove.extend(check.dirty_repos.iter().map(|(n, _)| n.clone()));
+            } else {
+                let confirm = Confirm::new()
+                    .with_prompt("Remove dirty repos too? (uncommitted changes will be lost)")
+                    .default(false)
+                    .interact()?;
+                if confirm {
+                    repos_to_remove.extend(check.dirty_repos.iter().map(|(n, _)| n.clone()));
+                }
+            }
+        }
+
+        if repos_to_remove.is_empty() {
+            println!("Nothing to remove.");
+            return Ok(());
+        }
+
+        let result = teardown_workspace(&config, &ws_path, &mut manifest, &repos_to_remove, force)?;
+
+        println!("Removed {} repo(s).", result.removed.len());
+        if !result.failed.is_empty() {
+            for (name, err) in &result.failed {
+                eprintln!("  Failed to remove {}: {}", name, err);
+            }
+        }
+        if result.remaining.is_empty() {
+            println!("Workspace '{}' torn down.", manifest.name);
+        } else {
+            println!(
+                "Partial teardown. Remaining: {}",
+                result.remaining.join(", ")
+            );
+        }
+
+        Ok(())
+    }
+
     fn run_new(
         name: String,
         base: Option<String>,
@@ -428,13 +559,10 @@ impl Cli {
                 Self::run_new(name, base, repos)?;
             }
             Command::Add { repo, workspace } => {
-                println!("loom add {repo} — not yet implemented");
-                if let Some(ws) = workspace {
-                    println!("  --workspace {ws}");
-                }
+                Self::run_add(repo, workspace)?;
             }
             Command::Remove { repo, force } => {
-                println!("loom remove {repo} (force={force}) — not yet implemented");
+                Self::run_remove(repo, force)?;
             }
             Command::List => {
                 Self::run_list()?;
@@ -452,8 +580,7 @@ impl Cli {
                 println!("loom tui — not yet implemented");
             }
             Command::Down { name, force } => {
-                let target = name.as_deref().unwrap_or("(detect from cwd)");
-                println!("loom down {target} (force={force}) — not yet implemented");
+                Self::run_down(name, force)?;
             }
             Command::Exec { cmd } => {
                 if cmd.is_empty() {

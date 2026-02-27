@@ -121,7 +121,11 @@ mod tests {
             base_branch: None,
             repos: vec![],
         };
-        manifest::write_manifest(&ws_path.join(crate::workspace::MANIFEST_FILENAME), &manifest).unwrap();
+        manifest::write_manifest(
+            &ws_path.join(crate::workspace::MANIFEST_FILENAME),
+            &manifest,
+        )
+        .unwrap();
 
         // Register in state.json
         let state_path = config.workspace.root.join(".loom").join("state.json");
@@ -210,7 +214,11 @@ mod tests {
                 remote_url: String::new(),
             }],
         };
-        manifest::write_manifest(&ws_path.join(crate::workspace::MANIFEST_FILENAME), &manifest).unwrap();
+        manifest::write_manifest(
+            &ws_path.join(crate::workspace::MANIFEST_FILENAME),
+            &manifest,
+        )
+        .unwrap();
 
         let state_path = config.workspace.root.join(".loom").join("state.json");
         let mut state = manifest::read_global_state(&state_path);
