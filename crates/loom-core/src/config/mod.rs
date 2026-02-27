@@ -116,13 +116,13 @@ impl Config {
 
     /// Save config to a specific path atomically (useful for testing)
     pub fn save_to(&self, path: &Path) -> Result<()> {
-        let content = toml::to_string_pretty(self)
-            .context("Failed to serialize config to TOML")?;
+        let content = toml::to_string_pretty(self).context("Failed to serialize config to TOML")?;
 
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create config directory {}", parent.display()))?;
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create config directory {}", parent.display())
+            })?;
         }
 
         // Atomic write: create temp file in same dir, write, then persist (rename)
@@ -130,7 +130,7 @@ impl Config {
         let tmp = tempfile::NamedTempFile::new_in(parent)
             .with_context(|| format!("Failed to create temp file in {}", parent.display()))?;
         std::fs::write(tmp.path(), content.as_bytes())
-            .with_context(|| format!("Failed to write config to temp file"))?;
+            .with_context(|| "Failed to write config to temp file".to_string())?;
         tmp.persist(path)
             .with_context(|| format!("Failed to persist config to {}", path.display()))?;
 
@@ -186,22 +186,20 @@ impl Config {
                 );
             }
             if !root.is_dir() {
-                anyhow::bail!(
-                    "scan_roots path `{}` is not a directory.",
-                    root.display()
-                );
+                anyhow::bail!("scan_roots path `{}` is not a directory.", root.display());
             }
         }
 
         // Validate workspace root parent exists (we can create the root itself)
         let ws_root = &self.workspace.root;
-        if let Some(parent) = ws_root.parent() {
-            if !parent.as_os_str().is_empty() && !parent.exists() {
-                anyhow::bail!(
-                    "workspace.root parent `{}` does not exist. Create it first.",
-                    parent.display()
-                );
-            }
+        if let Some(parent) = ws_root.parent()
+            && !parent.as_os_str().is_empty()
+            && !parent.exists()
+        {
+            anyhow::bail!(
+                "workspace.root parent `{}` does not exist. Create it first.",
+                parent.display()
+            );
         }
 
         // Validate branch_prefix is a valid git ref component
