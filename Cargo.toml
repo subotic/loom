@@ -15,24 +15,30 @@ loom-core = { path = "crates/loom-core" }
 
 # CLI
 clap = { version = "4.5", features = ["derive"] }
+clap_complete = "4.5"
 
 # TUI
-ratatui = "0.30"
-crossterm = "0.29"
-
-# Async
-tokio = { version = "1.49", features = ["full"] }
+ratatui = { version = "0.30", features = ["crossterm"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-toml = "1.0"
+toml = "0.8"
 
 # Error handling
 anyhow = "1.0"
+thiserror = "2.0"
 
 # Filesystem & paths
-directories = "6.0"
+dirs = "6.0"
+shellexpand = "3.1"
+tempfile = "3.15"
+
+# Interactive prompts
+dialoguer = "0.11"
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
+
+# Testing (used as dev-dependency in crates)
+insta = "1.42"
