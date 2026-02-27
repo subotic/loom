@@ -216,6 +216,36 @@ impl GitRepo {
         Ok(())
     }
 
+    /// Pull with rebase from origin
+    pub fn pull_rebase(&self) -> Result<(), GitError> {
+        self.git().args(&["pull", "--rebase"]).run()?;
+        Ok(())
+    }
+
+    /// Abort a rebase in progress
+    pub fn rebase_abort(&self) -> Result<(), GitError> {
+        self.git().args(&["rebase", "--abort"]).run()?;
+        Ok(())
+    }
+
+    /// Stage a file
+    pub fn add(&self, path: &str) -> Result<(), GitError> {
+        self.git().args(&["add", path]).run()?;
+        Ok(())
+    }
+
+    /// Commit with a message
+    pub fn commit(&self, message: &str) -> Result<(), GitError> {
+        self.git().args(&["commit", "-m", message]).run()?;
+        Ok(())
+    }
+
+    /// Push to origin (current branch)
+    pub fn push(&self) -> Result<(), GitError> {
+        self.git().args(&["push"]).run()?;
+        Ok(())
+    }
+
     /// Get the remote URL for origin
     pub fn remote_url(&self) -> Result<Option<String>, GitError> {
         let output = self

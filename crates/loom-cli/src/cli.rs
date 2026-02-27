@@ -608,6 +608,87 @@ impl Cli {
         Ok(())
     }
 
+    fn run_save(force: bool) -> anyhow::Result<()> {
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::sync::save::save_workspace;
+        use loom_core::workspace;
+
+        let config = ensure_config_loaded()?;
+        let cwd = std::env::current_dir()?;
+
+        let (ws_path, manifest) = workspace::resolve_workspace(None, &cwd, &config)?;
+
+        println!("Saving workspace '{}'...", manifest.name);
+
+        let result = save_workspace(&config, &ws_path, &manifest, force)?;
+
+        // Report pushed repos
+        if !result.pushed.is_empty() {
+            println!("Pushed: {}", result.pushed.join(", "));
+        }
+
+        // Report skipped dirty repos
+        if !result.dirty_skipped.is_empty() {
+            println!(
+                "Skipped (dirty): {} (use --force to push anyway)",
+                result.dirty_skipped.join(", ")
+            );
+        }
+
+        // Report push failures
+        if !result.push_failed.is_empty() {
+            for (name, err) in &result.push_failed {
+                eprintln!("  Failed to push {}: {}", name, err);
+            }
+        }
+
+        // Report sync status
+        if let Some(ref err) = result.sync_error {
+            eprintln!("Sync warning: {err}");
+        }
+
+        Ok(())
+    }
+
+    fn run_open(name: String) -> anyhow::Result<()> {
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::sync::open::open_workspace;
+
+        let config = ensure_config_loaded()?;
+
+        println!("Opening workspace '{name}'...");
+
+        let result = open_workspace(&config, &name)?;
+
+        println!(
+            "Workspace '{}' opened at {}",
+            result.name,
+            result.path.display()
+        );
+        println!("  {} repo(s) restored", result.repos_restored);
+
+        if !result.repos_cloned.is_empty() {
+            println!("  Cloned: {}", result.repos_cloned.join(", "));
+        }
+
+        if !result.repos_failed.is_empty() {
+            for (name, err) in &result.repos_failed {
+                eprintln!("  Failed: {}: {}", name, err);
+            }
+        }
+
+        for warning in &result.warnings {
+            println!("  Warning: {warning}");
+        }
+
+        println!(
+            "\n  Hint: If using Claude Code, start it in {} to use this workspace.",
+            result.path.display()
+        );
+
+        Ok(())
+    }
+
     pub fn run(self) -> anyhow::Result<()> {
         match self.command {
             Command::Init => {
@@ -629,10 +710,10 @@ impl Cli {
                 Self::run_status(name, fetch)?;
             }
             Command::Save { force } => {
-                println!("loom save (force={force}) — not yet implemented");
+                Self::run_save(force)?;
             }
             Command::Open { name } => {
-                println!("loom open {name} — not yet implemented");
+                Self::run_open(name)?;
             }
             Command::Tui => {
                 println!("loom tui — not yet implemented");
