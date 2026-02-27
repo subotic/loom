@@ -84,6 +84,12 @@ impl GitRepo {
         Ok(!output.stdout.trim().is_empty())
     }
 
+    /// Count the number of changed files (staged + unstaged + untracked).
+    pub fn change_count(&self) -> Result<usize, GitError> {
+        let output = self.git().args(&["status", "--porcelain"]).run()?;
+        Ok(output.stdout.trim().lines().count())
+    }
+
     /// Get the current branch name (empty string if detached HEAD)
     pub fn current_branch(&self) -> Result<String, GitError> {
         let output = self.git().args(&["branch", "--show-current"]).run()?;
