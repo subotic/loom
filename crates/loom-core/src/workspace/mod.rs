@@ -1,5 +1,8 @@
+pub mod add;
+pub mod down;
 pub mod list;
 pub mod new;
+pub mod remove;
 pub mod status;
 
 use std::path::{Path, PathBuf};
