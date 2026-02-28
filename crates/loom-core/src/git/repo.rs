@@ -218,6 +218,7 @@ impl GitRepo {
 
     /// Resolve the best available start point for a new worktree.
     /// Prefers origin/{branch} (freshest state), falls back to local {branch}.
+    /// Call after `fetch()` to ensure remote refs are up-to-date.
     pub fn resolve_start_point(&self, branch: &str) -> String {
         let remote_ref = format!("origin/{}", branch);
         let check = self
@@ -547,5 +548,66 @@ branch refs/heads/main";
         // Create untracked file
         std::fs::write(path.join("test.txt"), "hello").unwrap();
         assert!(repo.is_dirty().unwrap());
+    }
+
+    #[test]
+    fn test_resolve_start_point_no_remote() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path();
+
+        std::process::Command::new("git")
+            .args(["init", "-b", "main", &path.to_string_lossy()])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["-C", &path.to_string_lossy(), "commit", "--allow-empty", "-m", "init"])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+
+        let repo = GitRepo::new(path);
+        // No remote configured — should fall back to local branch name
+        assert_eq!(repo.resolve_start_point("main"), "main");
+    }
+
+    #[test]
+    fn test_resolve_start_point_with_remote() {
+        // Create "remote" repo
+        let remote_dir = tempfile::tempdir().unwrap();
+        let remote_path = remote_dir.path();
+        std::process::Command::new("git")
+            .args(["init", "-b", "main", &remote_path.to_string_lossy()])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["-C", &remote_path.to_string_lossy(), "commit", "--allow-empty", "-m", "init"])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+
+        // Create local repo with remote pointing to the above
+        let local_dir = tempfile::tempdir().unwrap();
+        let local_path = local_dir.path();
+        std::process::Command::new("git")
+            .args(["init", "-b", "main", &local_path.to_string_lossy()])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["-C", &local_path.to_string_lossy(), "remote", "add", "origin", &remote_path.to_string_lossy()])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["-C", &local_path.to_string_lossy(), "fetch", "origin"])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+
+        let repo = GitRepo::new(local_path);
+        // Remote ref exists after fetch — should return origin/main
+        assert_eq!(repo.resolve_start_point("main"), "origin/main");
     }
 }
