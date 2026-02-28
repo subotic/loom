@@ -1,0 +1,41 @@
+---
+source: crates/loom-core/src/agent/claude_code.rs
+expression: content
+---
+{
+  "additionalDirectories": [
+    "/loom/my-feature/dsp-api",
+    "/loom/my-feature/dsp-das"
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(cargo clippy *)",
+      "Bash(cargo fmt *)",
+      "Bash(cargo test *)",
+      "Bash(gh issue *)",
+      "Bash(gh run *)",
+      "WebFetch(domain:docs.rs)"
+    ]
+  },
+  "sandbox": {
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": true,
+    "enabled": true,
+    "excludedCommands": [
+      "docker"
+    ],
+    "filesystem": {
+      "allowWrite": [
+        "~/.cargo",
+        "~/.config/loom"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "crates.io",
+        "docs.rs",
+        "github.com"
+      ]
+    }
+  }
+}
