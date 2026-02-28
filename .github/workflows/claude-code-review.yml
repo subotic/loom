@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
       id-token: write
 
@@ -38,7 +38,15 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
+          prompt: |
+            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+
+            Additional review context for this Rust codebase:
+
+            - Read CLAUDE.md for commit conventions (conventional commits, rebase merges, scoped types)
+            - This is a Rust workspace with crates in crates/loom-core and crates/loom-cli
+            - Check for: ownership/borrowing correctness, proper error handling with anyhow, serde attribute correctness, idiomatic trait design
+            - Verify tests pass conceptually (snapshot tests use insta, config tests use tempfile)
+            - Flag any path traversal, injection, or unsafe patterns
+            - Verify commit messages follow the conventional commit format in CLAUDE.md
 
