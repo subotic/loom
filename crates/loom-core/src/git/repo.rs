@@ -196,12 +196,6 @@ impl GitRepo {
         Ok(())
     }
 
-    /// Check if a local branch exists
-    pub fn branch_exists(&self, name: &str) -> Result<bool, GitError> {
-        let output = self.git().args(&["branch", "--list", name]).run()?;
-        Ok(!output.stdout.trim().is_empty())
-    }
-
     /// Check if a ref exists (local branch, remote ref, tag, or arbitrary ref).
     pub fn ref_exists(&self, refspec: &str) -> Result<bool, GitError> {
         let output = self
@@ -230,13 +224,10 @@ impl GitRepo {
     /// Call after `fetch()` to ensure remote refs are up-to-date.
     pub fn resolve_start_point(&self, branch: &str) -> String {
         let remote_ref = format!("origin/{}", branch);
-        let check = self
-            .git()
-            .args(&["rev-parse", "--verify", &remote_ref])
-            .run_unchecked();
-        match check {
-            Ok(output) if output.exit_code == 0 => remote_ref,
-            _ => branch.to_string(),
+        if self.ref_exists(&remote_ref).unwrap_or(false) {
+            remote_ref
+        } else {
+            branch.to_string()
         }
     }
 
