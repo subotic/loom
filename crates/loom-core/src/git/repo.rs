@@ -561,7 +561,14 @@ branch refs/heads/main";
             .output()
             .unwrap();
         std::process::Command::new("git")
-            .args(["-C", &path.to_string_lossy(), "commit", "--allow-empty", "-m", "init"])
+            .args([
+                "-C",
+                &path.to_string_lossy(),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "init",
+            ])
             .env("LC_ALL", "C")
             .output()
             .unwrap();
@@ -582,7 +589,14 @@ branch refs/heads/main";
             .output()
             .unwrap();
         std::process::Command::new("git")
-            .args(["-C", &remote_path.to_string_lossy(), "commit", "--allow-empty", "-m", "init"])
+            .args([
+                "-C",
+                &remote_path.to_string_lossy(),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "init",
+            ])
             .env("LC_ALL", "C")
             .output()
             .unwrap();
@@ -596,7 +610,14 @@ branch refs/heads/main";
             .output()
             .unwrap();
         std::process::Command::new("git")
-            .args(["-C", &local_path.to_string_lossy(), "remote", "add", "origin", &remote_path.to_string_lossy()])
+            .args([
+                "-C",
+                &local_path.to_string_lossy(),
+                "remote",
+                "add",
+                "origin",
+                &remote_path.to_string_lossy(),
+            ])
             .env("LC_ALL", "C")
             .output()
             .unwrap();
@@ -622,7 +643,14 @@ branch refs/heads/main";
             .output()
             .unwrap();
         std::process::Command::new("git")
-            .args(["-C", &path.to_string_lossy(), "commit", "--allow-empty", "-m", "init"])
+            .args([
+                "-C",
+                &path.to_string_lossy(),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "init",
+            ])
             .env("LC_ALL", "C")
             .output()
             .unwrap();
@@ -643,7 +671,14 @@ branch refs/heads/main";
             .output()
             .unwrap();
         std::process::Command::new("git")
-            .args(["-C", &remote_path.to_string_lossy(), "commit", "--allow-empty", "-m", "init"])
+            .args([
+                "-C",
+                &remote_path.to_string_lossy(),
+                "commit",
+                "--allow-empty",
+                "-m",
+                "init",
+            ])
             .env("LC_ALL", "C")
             .output()
             .unwrap();
@@ -657,7 +692,14 @@ branch refs/heads/main";
             .output()
             .unwrap();
         std::process::Command::new("git")
-            .args(["-C", &local_path.to_string_lossy(), "remote", "add", "origin", &remote_path.to_string_lossy()])
+            .args([
+                "-C",
+                &local_path.to_string_lossy(),
+                "remote",
+                "add",
+                "origin",
+                &remote_path.to_string_lossy(),
+            ])
             .env("LC_ALL", "C")
             .output()
             .unwrap();
