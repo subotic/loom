@@ -36,19 +36,31 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
+          # Direct prompt approach — the plugin approach (code-review@claude-code-plugins)
+          # does not reliably post comments to PRs. See:
+          # https://github.com/anthropics/claude-code-action/issues/825
+          # https://github.com/anthropics/claude-code-action/issues/419
           prompt: |
-            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
 
-            Additional review context for this Rust codebase:
+            Please review this pull request and provide feedback on:
+            - Code quality and best practices
+            - Potential bugs or issues
+            - Performance considerations
+            - Security concerns
 
+            Rust-specific review context:
             - Read CLAUDE.md for commit conventions (conventional commits, rebase merges, scoped types)
             - This is a Rust workspace with crates in crates/loom-core and crates/loom-cli
             - Check for: ownership/borrowing correctness, proper error handling with anyhow, serde attribute correctness, idiomatic trait design
             - Verify tests pass conceptually (snapshot tests use insta, config tests use tempfile)
             - Flag any path traversal, injection, or unsafe patterns
             - Verify commit messages follow the conventional commit format in CLAUDE.md
-          use_sticky_comment: true
+
+            Be constructive and helpful in your feedback.
+            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+
+          claude_args: '--allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md for available options
 
