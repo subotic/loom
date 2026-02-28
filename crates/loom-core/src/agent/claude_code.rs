@@ -189,6 +189,7 @@ mod tests {
                 repo: "org/test-plugins".to_string(),
             }],
             enabled_plugins: vec!["pkm@test-marketplace".to_string()],
+            ..Default::default()
         };
         let content = generate_settings(&manifest, &cc_config);
         insta::assert_snapshot!(content);
@@ -274,7 +275,7 @@ mod tests {
                 name: "my-plugins".to_string(),
                 repo: "owner/my-plugins".to_string(),
             }],
-            enabled_plugins: vec![],
+            ..Default::default()
         };
         let content = generate_settings(&manifest, &cc_config);
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -286,8 +287,8 @@ mod tests {
     fn test_settings_plugins_only() {
         let manifest = test_manifest();
         let cc_config = ClaudeCodeConfig {
-            extra_known_marketplaces: vec![],
             enabled_plugins: vec!["pkm@global-marketplace".to_string()],
+            ..Default::default()
         };
         let content = generate_settings(&manifest, &cc_config);
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();

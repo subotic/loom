@@ -1,5 +1,6 @@
 pub mod init;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -71,6 +72,99 @@ pub struct MarketplaceEntry {
     pub repo: String,
 }
 
+/// Sandbox filesystem isolation settings.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SandboxFilesystemConfig {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow_write: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deny_write: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deny_read: Vec<String>,
+}
+
+impl SandboxFilesystemConfig {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.allow_write.is_empty() && self.deny_write.is_empty() && self.deny_read.is_empty()
+    }
+}
+
+/// Sandbox network isolation settings.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SandboxNetworkConfig {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_domains: Vec<String>,
+}
+
+impl SandboxNetworkConfig {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.allowed_domains.is_empty()
+    }
+}
+
+/// OS-level sandbox configuration for Claude Code.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SandboxConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_allow: Option<bool>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_commands: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_unsandboxed_commands: Option<bool>,
+    #[serde(default, skip_serializing_if = "SandboxFilesystemConfig::is_empty")]
+    pub filesystem: SandboxFilesystemConfig,
+    #[serde(default, skip_serializing_if = "SandboxNetworkConfig::is_empty")]
+    pub network: SandboxNetworkConfig,
+}
+
+impl SandboxConfig {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.enabled.is_none()
+            && self.auto_allow.is_none()
+            && self.excluded_commands.is_empty()
+            && self.allow_unsandboxed_commands.is_none()
+            && self.filesystem.is_empty()
+            && self.network.is_empty()
+    }
+}
+
+/// Sandbox settings within a preset (arrays only, no booleans).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresetSandboxConfig {
+    #[serde(default, skip_serializing_if = "SandboxFilesystemConfig::is_empty")]
+    pub filesystem: SandboxFilesystemConfig,
+    #[serde(default, skip_serializing_if = "SandboxNetworkConfig::is_empty")]
+    pub network: SandboxNetworkConfig,
+}
+
+impl PresetSandboxConfig {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.filesystem.is_empty() && self.network.is_empty()
+    }
+}
+
+/// A named permission preset (e.g., "rust", "node").
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PermissionPreset {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_tools: Vec<String>,
+    #[serde(default, skip_serializing_if = "PresetSandboxConfig::is_empty")]
+    pub sandbox: PresetSandboxConfig,
+}
+
+impl PermissionPreset {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.allowed_tools.is_empty() && self.sandbox.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ClaudeCodeConfig {
@@ -81,12 +175,28 @@ pub struct ClaudeCodeConfig {
     /// Enabled plugins (e.g., ["pluginName@marketplaceName"])
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub enabled_plugins: Vec<String>,
+
+    /// Global permission allowlist entries (e.g., ["Bash(cargo test *)"])
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_tools: Vec<String>,
+
+    /// Global sandbox configuration
+    #[serde(default, skip_serializing_if = "SandboxConfig::is_empty")]
+    pub sandbox: SandboxConfig,
+
+    /// Named permission presets (selected per workspace via --preset)
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub presets: BTreeMap<String, PermissionPreset>,
 }
 
 impl ClaudeCodeConfig {
     /// Returns true when all fields are empty (used by serde skip_serializing_if).
     pub(crate) fn is_empty(&self) -> bool {
-        self.extra_known_marketplaces.is_empty() && self.enabled_plugins.is_empty()
+        self.extra_known_marketplaces.is_empty()
+            && self.enabled_plugins.is_empty()
+            && self.allowed_tools.is_empty()
+            && self.sandbox.is_empty()
+            && self.presets.is_empty()
     }
 }
 
@@ -116,6 +226,52 @@ impl Default for AgentsConfig {
 
 fn default_branch_prefix() -> String {
     "loom".to_string()
+}
+
+/// Validate a Claude Code permission entry has the form `ToolName(specifier)`.
+fn validate_permission_entry(entry: &str, context: &str) -> Result<()> {
+    let trimmed = entry.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("{context}: permission entry cannot be empty");
+    }
+    if !trimmed.ends_with(')') || !trimmed.contains('(') {
+        anyhow::bail!("{context}: invalid format '{trimmed}' — expected ToolName(specifier)");
+    }
+    let (tool_name, _specifier) = trimmed
+        .split_once('(')
+        .expect("already checked for '('");
+    if !tool_name.starts_with("mcp__")
+        && !tool_name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_uppercase())
+    {
+        anyhow::bail!(
+            "{context}: tool name must start with uppercase letter or 'mcp__', got '{tool_name}'"
+        );
+    }
+    Ok(())
+}
+
+/// Validate that no entry in a string list is empty or whitespace-only.
+fn validate_no_empty_entries(entries: &[String], context: &str) -> Result<()> {
+    for entry in entries {
+        if entry.trim().is_empty() {
+            anyhow::bail!("{context}: entries cannot be empty or whitespace-only");
+        }
+    }
+    Ok(())
+}
+
+/// Validate that a string list has no duplicates.
+fn validate_no_duplicates(entries: &[String], context: &str) -> Result<()> {
+    let mut seen = std::collections::HashSet::new();
+    for entry in entries {
+        if !seen.insert(entry) {
+            anyhow::bail!("{context}: duplicate entry '{entry}'");
+        }
+    }
+    Ok(())
 }
 
 /// Expand ~ and environment variables in a path using shellexpand
@@ -291,6 +447,60 @@ impl Config {
                     );
                 }
             }
+        }
+
+        // Validate allowed_tools permission entries
+        let cc = &self.agents.claude_code;
+        for entry in &cc.allowed_tools {
+            validate_permission_entry(entry, "agents.claude-code.allowed_tools")?;
+        }
+        validate_no_duplicates(&cc.allowed_tools, "agents.claude-code.allowed_tools")?;
+
+        // Validate sandbox path entries
+        validate_no_empty_entries(
+            &cc.sandbox.filesystem.allow_write,
+            "agents.claude-code.sandbox.filesystem.allow_write",
+        )?;
+        validate_no_empty_entries(
+            &cc.sandbox.filesystem.deny_write,
+            "agents.claude-code.sandbox.filesystem.deny_write",
+        )?;
+        validate_no_empty_entries(
+            &cc.sandbox.filesystem.deny_read,
+            "agents.claude-code.sandbox.filesystem.deny_read",
+        )?;
+        validate_no_empty_entries(
+            &cc.sandbox.network.allowed_domains,
+            "agents.claude-code.sandbox.network.allowed_domains",
+        )?;
+        validate_no_empty_entries(
+            &cc.sandbox.excluded_commands,
+            "agents.claude-code.sandbox.excluded_commands",
+        )?;
+
+        // Validate presets
+        for (name, preset) in &cc.presets {
+            let ctx = format!("agents.claude-code.presets.{name}");
+            for entry in &preset.allowed_tools {
+                validate_permission_entry(entry, &format!("{ctx}.allowed_tools"))?;
+            }
+            validate_no_duplicates(&preset.allowed_tools, &format!("{ctx}.allowed_tools"))?;
+            validate_no_empty_entries(
+                &preset.sandbox.filesystem.allow_write,
+                &format!("{ctx}.sandbox.filesystem.allow_write"),
+            )?;
+            validate_no_empty_entries(
+                &preset.sandbox.filesystem.deny_write,
+                &format!("{ctx}.sandbox.filesystem.deny_write"),
+            )?;
+            validate_no_empty_entries(
+                &preset.sandbox.filesystem.deny_read,
+                &format!("{ctx}.sandbox.filesystem.deny_read"),
+            )?;
+            validate_no_empty_entries(
+                &preset.sandbox.network.allowed_domains,
+                &format!("{ctx}.sandbox.network.allowed_domains"),
+            )?;
         }
 
         Ok(())
@@ -487,6 +697,7 @@ root = "/loom"
                         "pkm@my-plugins".to_string(),
                         "eng@team-plugins".to_string(),
                     ],
+                    ..Default::default()
                 },
             },
         };
@@ -576,7 +787,7 @@ enabled = ["claude-code"]
                             repo: "owner/repo2".to_string(),
                         },
                     ],
-                    enabled_plugins: vec![],
+                    ..Default::default()
                 },
             },
         };
@@ -605,7 +816,7 @@ enabled = ["claude-code"]
                         name: String::new(),
                         repo: "owner/repo".to_string(),
                     }],
-                    enabled_plugins: vec![],
+                    ..Default::default()
                 },
             },
         };
@@ -634,7 +845,7 @@ enabled = ["claude-code"]
                         name: "test".to_string(),
                         repo: "no-slash".to_string(),
                     }],
-                    enabled_plugins: vec![],
+                    ..Default::default()
                 },
             },
         };
@@ -663,7 +874,7 @@ enabled = ["claude-code"]
                         name: "test".to_string(),
                         repo: "a/b/c".to_string(),
                     }],
-                    enabled_plugins: vec![],
+                    ..Default::default()
                 },
             },
         };
@@ -689,8 +900,8 @@ enabled = ["claude-code"]
             agents: AgentsConfig {
                 enabled: vec!["claude-code".to_string()],
                 claude_code: ClaudeCodeConfig {
-                    extra_known_marketplaces: vec![],
                     enabled_plugins: vec!["@marketplace".to_string()],
+                    ..Default::default()
                 },
             },
         };
@@ -701,8 +912,8 @@ enabled = ["claude-code"]
             agents: AgentsConfig {
                 enabled: vec!["claude-code".to_string()],
                 claude_code: ClaudeCodeConfig {
-                    extra_known_marketplaces: vec![],
                     enabled_plugins: vec!["plugin@".to_string()],
+                    ..Default::default()
                 },
             },
             ..config.clone()
@@ -714,8 +925,8 @@ enabled = ["claude-code"]
             agents: AgentsConfig {
                 enabled: vec!["claude-code".to_string()],
                 claude_code: ClaudeCodeConfig {
-                    extra_known_marketplaces: vec![],
                     enabled_plugins: vec!["@".to_string()],
+                    ..Default::default()
                 },
             },
             ..config
@@ -739,13 +950,347 @@ enabled = ["claude-code"]
             agents: AgentsConfig {
                 enabled: vec!["claude-code".to_string()],
                 claude_code: ClaudeCodeConfig {
-                    extra_known_marketplaces: vec![],
                     enabled_plugins: vec!["no-at-sign".to_string()],
+                    ..Default::default()
                 },
             },
         };
 
         let err = config.validate().unwrap_err();
         assert!(err.to_string().contains("pluginName@marketplaceName"));
+    }
+
+    #[test]
+    fn test_allowed_tools_round_trip() {
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    allowed_tools: vec![
+                        "Bash(cargo test *)".to_string(),
+                        "WebFetch(domain:docs.rs)".to_string(),
+                    ],
+                    ..Default::default()
+                },
+            },
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let parsed: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(
+            parsed.agents.claude_code.allowed_tools,
+            config.agents.claude_code.allowed_tools
+        );
+    }
+
+    #[test]
+    fn test_sandbox_config_round_trip() {
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    sandbox: SandboxConfig {
+                        enabled: Some(true),
+                        auto_allow: Some(true),
+                        excluded_commands: vec!["docker".to_string()],
+                        allow_unsandboxed_commands: Some(false),
+                        filesystem: SandboxFilesystemConfig {
+                            allow_write: vec!["~/.cargo".to_string()],
+                            deny_write: vec![],
+                            deny_read: vec![],
+                        },
+                        network: SandboxNetworkConfig {
+                            allowed_domains: vec!["github.com".to_string()],
+                        },
+                    },
+                    ..Default::default()
+                },
+            },
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let parsed: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.agents.claude_code.sandbox, config.agents.claude_code.sandbox);
+    }
+
+    #[test]
+    fn test_presets_round_trip() {
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "rust".to_string(),
+            PermissionPreset {
+                allowed_tools: vec![
+                    "Bash(cargo test *)".to_string(),
+                    "Bash(cargo clippy *)".to_string(),
+                ],
+                sandbox: PresetSandboxConfig {
+                    filesystem: SandboxFilesystemConfig {
+                        allow_write: vec!["~/.cargo".to_string()],
+                        ..Default::default()
+                    },
+                    network: SandboxNetworkConfig {
+                        allowed_domains: vec!["docs.rs".to_string(), "crates.io".to_string()],
+                    },
+                },
+            },
+        );
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    presets,
+                    ..Default::default()
+                },
+            },
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let parsed: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.agents.claude_code.presets, config.agents.claude_code.presets);
+    }
+
+    #[test]
+    fn test_sandbox_empty_suppressed() {
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig::default(),
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        assert!(
+            !toml_str.contains("sandbox"),
+            "Empty sandbox should be suppressed:\n{toml_str}"
+        );
+        assert!(
+            !toml_str.contains("allowed_tools"),
+            "Empty allowed_tools should be suppressed:\n{toml_str}"
+        );
+        assert!(
+            !toml_str.contains("presets"),
+            "Empty presets should be suppressed:\n{toml_str}"
+        );
+    }
+
+    #[test]
+    fn test_sandbox_enabled_only_is_not_empty() {
+        let sandbox = SandboxConfig {
+            enabled: Some(true),
+            ..Default::default()
+        };
+        assert!(!sandbox.is_empty(), "sandbox with enabled=true should not be empty");
+    }
+
+    #[test]
+    fn test_validate_permission_entries() {
+        assert!(validate_permission_entry("Bash(cargo test *)", "test").is_ok());
+        assert!(validate_permission_entry("mcp__slack__send(channel *)", "test").is_ok());
+        assert!(validate_permission_entry("WebFetch(domain:docs.rs)", "test").is_ok());
+        assert!(validate_permission_entry("Skill(eng:workflows:plan)", "test").is_ok());
+
+        // Invalid cases
+        assert!(validate_permission_entry("", "test").is_err());
+        assert!(validate_permission_entry("   ", "test").is_err());
+        assert!(validate_permission_entry("Bash", "test").is_err());
+        assert!(validate_permission_entry("bash(cargo test *)", "test").is_err());
+    }
+
+    #[test]
+    fn test_validate_allowed_tools_duplicates() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    allowed_tools: vec![
+                        "Bash(cargo test *)".to_string(),
+                        "Bash(cargo test *)".to_string(),
+                    ],
+                    ..Default::default()
+                },
+            },
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("duplicate"));
+    }
+
+    #[test]
+    fn test_validate_sandbox_empty_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    sandbox: SandboxConfig {
+                        filesystem: SandboxFilesystemConfig {
+                            allow_write: vec!["  ".to_string()],
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            },
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("empty or whitespace"));
+    }
+
+    #[test]
+    fn test_validate_preset_invalid_permission() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "bad".to_string(),
+            PermissionPreset {
+                allowed_tools: vec!["bash(lowercase)".to_string()],
+                ..Default::default()
+            },
+        );
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    presets,
+                    ..Default::default()
+                },
+            },
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("presets.bad"));
+    }
+
+    #[test]
+    fn test_full_config_round_trip() {
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "rust".to_string(),
+            PermissionPreset {
+                allowed_tools: vec!["Bash(cargo test *)".to_string()],
+                sandbox: PresetSandboxConfig {
+                    filesystem: SandboxFilesystemConfig {
+                        allow_write: vec!["~/.cargo".to_string()],
+                        ..Default::default()
+                    },
+                    network: SandboxNetworkConfig {
+                        allowed_domains: vec!["docs.rs".to_string()],
+                    },
+                },
+            },
+        );
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    extra_known_marketplaces: vec![MarketplaceEntry {
+                        name: "test".to_string(),
+                        repo: "org/test".to_string(),
+                    }],
+                    enabled_plugins: vec!["eng@test".to_string()],
+                    allowed_tools: vec!["Bash(gh issue *)".to_string()],
+                    sandbox: SandboxConfig {
+                        enabled: Some(true),
+                        auto_allow: Some(true),
+                        excluded_commands: vec!["docker".to_string()],
+                        allow_unsandboxed_commands: None,
+                        filesystem: SandboxFilesystemConfig {
+                            allow_write: vec!["~/.config/loom".to_string()],
+                            deny_write: vec![],
+                            deny_read: vec![],
+                        },
+                        network: SandboxNetworkConfig {
+                            allowed_domains: vec!["github.com".to_string()],
+                        },
+                    },
+                    presets,
+                },
+            },
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let parsed: Config = toml::from_str(&toml_str).unwrap();
+
+        assert_eq!(
+            parsed.agents.claude_code.allowed_tools,
+            config.agents.claude_code.allowed_tools
+        );
+        assert_eq!(parsed.agents.claude_code.sandbox, config.agents.claude_code.sandbox);
+        assert_eq!(parsed.agents.claude_code.presets, config.agents.claude_code.presets);
     }
 }
