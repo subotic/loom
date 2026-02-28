@@ -49,4 +49,5 @@ jobs:
             - Verify tests pass conceptually (snapshot tests use insta, config tests use tempfile)
             - Flag any path traversal, injection, or unsafe patterns
             - Verify commit messages follow the conventional commit format in CLAUDE.md
+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md for available options
 
