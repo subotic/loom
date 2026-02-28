@@ -28,7 +28,7 @@ pub struct RegistryConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceConfig {
-    /// Root directory for all workspaces (default: ~/loom)
+    /// Root directory for all workspaces (default: ~/workspaces)
     pub root: PathBuf,
 }
 
@@ -146,7 +146,7 @@ impl Config {
                 scan_roots: Vec::new(),
             },
             workspace: WorkspaceConfig {
-                root: PathBuf::from("~/loom"),
+                root: PathBuf::from("~/workspaces"),
             },
             sync: None,
             terminal: None,
@@ -375,7 +375,7 @@ root = "/loom"
     fn test_default_config() {
         let config = Config::default_config();
         assert!(config.registry.scan_roots.is_empty());
-        assert_eq!(config.workspace.root, PathBuf::from("~/loom"));
+        assert_eq!(config.workspace.root, PathBuf::from("~/workspaces"));
         assert_eq!(config.defaults.branch_prefix, "loom");
         assert_eq!(config.agents.enabled, vec!["claude-code"]);
     }
