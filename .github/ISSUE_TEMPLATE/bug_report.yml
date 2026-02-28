@@ -1,0 +1,106 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in LOOM
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Bug summary
+      description: One-sentence description of the bug.
+      placeholder: "`loom new` fails when ..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: command
+    attributes:
+      label: Command
+      description: Which `loom` command triggered the bug?
+      options:
+        - loom init
+        - loom new
+        - loom add
+        - loom remove
+        - loom down
+        - loom list
+        - loom status
+        - loom exec
+        - loom shell
+        - loom save
+        - loom open
+        - loom registry
+        - TUI
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps to reliably reproduce the bug.
+      placeholder: |
+        1. Run `loom new test-ws`
+        2. Select repos X and Y
+        3. Observe error ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Include the full error message, panic output, or unexpected behavior.
+      placeholder: |
+        ```
+        Error: ...
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Please provide:
+        - OS and version
+        - Git version (`git --version`)
+        - LOOM version (`loom --version`)
+        - Rust version if building from source (`rustc --version`)
+      placeholder: |
+        - OS: macOS 15.3
+        - Git: 2.47.0
+        - LOOM: 0.1.0
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: modules
+    attributes:
+      label: Modules likely affected
+      description: Which crate modules do you think are involved? (Check all that apply)
+      options:
+        - label: "`workspace`"
+        - label: "`git`"
+        - label: "`config`"
+        - label: "`manifest`"
+        - label: "`sync`"
+        - label: "`tui`"
+        - label: "`agent`"
+        - label: "`registry`"
+        - label: "`cli`"
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Logs, screenshots, config snippets, or workarounds.

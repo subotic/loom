@@ -1,0 +1,99 @@
+name: Feature Request
+description: Propose a new feature or enhancement for LOOM
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-paragraph description of the feature.
+      placeholder: "LOOM should support ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this needed? What problem does it solve or what workflow does it enable?
+      placeholder: "When I try to ... I run into ... because ..."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: commands
+    attributes:
+      label: Commands affected
+      description: Which `loom` commands are involved? (Check all that apply)
+      options:
+        - label: "`loom init`"
+        - label: "`loom new`"
+        - label: "`loom add`"
+        - label: "`loom remove`"
+        - label: "`loom down`"
+        - label: "`loom list`"
+        - label: "`loom status`"
+        - label: "`loom exec`"
+        - label: "`loom shell`"
+        - label: "`loom save`"
+        - label: "`loom open`"
+        - label: "`loom registry`"
+        - label: "TUI"
+        - label: "New command"
+
+  - type: checkboxes
+    id: modules
+    attributes:
+      label: Modules affected
+      description: Which crate modules are likely touched? (Check all that apply)
+      options:
+        - label: "`workspace`"
+        - label: "`git`"
+        - label: "`config`"
+        - label: "`manifest`"
+        - label: "`sync`"
+        - label: "`tui`"
+        - label: "`agent`"
+        - label: "`registry`"
+        - label: "`cli`"
+
+  - type: textarea
+    id: proposed-behavior
+    attributes:
+      label: Proposed behavior
+      description: |
+        How should the feature work? Include CLI examples, expected output, and edge cases.
+      placeholder: |
+        ```
+        $ loom new my-workspace
+        # expected output ...
+        ```
+
+        Edge cases:
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: Checklist of conditions that must be true when this feature is complete.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+        - [ ] Tests pass
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you considered and why this one is preferred.
+
+  - type: textarea
+    id: related
+    attributes:
+      label: Related issues / specs
+      description: Links to PRD sections, other issues, or specs.
