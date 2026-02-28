@@ -68,7 +68,10 @@ pub fn create_config(
         sync: None,
         terminal: terminal.map(|command| TerminalConfig { command }),
         defaults: DefaultsConfig { branch_prefix },
-        agents: AgentsConfig { enabled: agents },
+        agents: AgentsConfig {
+            enabled: agents,
+            ..Default::default()
+        },
     };
 
     Ok(config)

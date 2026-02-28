@@ -61,17 +61,55 @@ impl Default for DefaultsConfig {
     }
 }
 
+/// A marketplace source for Claude Code plugins.
+/// MVP supports GitHub sources only; other source types can be added later.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MarketplaceEntry {
+    /// Marketplace name (used as key in generated JSON)
+    pub name: String,
+    /// GitHub repo in "owner/repo" format
+    pub repo: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClaudeCodeConfig {
+    /// Extra marketplace repos
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_known_marketplaces: Vec<MarketplaceEntry>,
+
+    /// Enabled plugins (e.g., ["pluginName@marketplaceName"])
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub enabled_plugins: Vec<String>,
+}
+
+impl ClaudeCodeConfig {
+    /// Returns true when all fields are empty (used by serde skip_serializing_if).
+    pub(crate) fn is_empty(&self) -> bool {
+        self.extra_known_marketplaces.is_empty() && self.enabled_plugins.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentsConfig {
     /// Which agents to configure (e.g., ["claude-code"])
     #[serde(default)]
     pub enabled: Vec<String>,
+
+    /// Claude Code-specific settings
+    #[serde(
+        default,
+        rename = "claude-code",
+        skip_serializing_if = "ClaudeCodeConfig::is_empty"
+    )]
+    pub claude_code: ClaudeCodeConfig,
 }
 
 impl Default for AgentsConfig {
     fn default() -> Self {
         Self {
             enabled: vec!["claude-code".to_string()],
+            claude_code: ClaudeCodeConfig::default(),
         }
     }
 }
@@ -216,6 +254,45 @@ impl Config {
             );
         }
 
+        // Validate marketplace entries
+        let mut seen_names = std::collections::HashSet::new();
+        for entry in &self.agents.claude_code.extra_known_marketplaces {
+            if entry.name.is_empty() {
+                anyhow::bail!(
+                    "agents.claude-code.extra_known_marketplaces: marketplace name cannot be empty."
+                );
+            }
+            match entry.repo.split_once('/') {
+                Some((owner, repo))
+                    if !owner.is_empty() && !repo.is_empty() && !repo.contains('/') => {}
+                _ => {
+                    anyhow::bail!(
+                        "agents.claude-code.extra_known_marketplaces: repo '{}' must be in 'owner/repo' format.",
+                        entry.repo
+                    );
+                }
+            }
+            if !seen_names.insert(&entry.name) {
+                anyhow::bail!(
+                    "agents.claude-code.extra_known_marketplaces: duplicate marketplace name '{}'.",
+                    entry.name
+                );
+            }
+        }
+
+        // Validate enabled_plugins format
+        for plugin in &self.agents.claude_code.enabled_plugins {
+            match plugin.split_once('@') {
+                Some((name, marketplace)) if !name.is_empty() && !marketplace.is_empty() => {}
+                _ => {
+                    anyhow::bail!(
+                        "agents.claude-code.enabled_plugins: '{}' must be in 'pluginName@marketplaceName' format.",
+                        plugin
+                    );
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -253,6 +330,7 @@ mod tests {
             },
             agents: AgentsConfig {
                 enabled: vec!["claude-code".to_string()],
+                ..Default::default()
             },
         };
 
@@ -378,5 +456,296 @@ root = "/loom"
         assert_eq!(config.workspace.root, PathBuf::from("~/workspaces"));
         assert_eq!(config.defaults.branch_prefix, "loom");
         assert_eq!(config.agents.enabled, vec!["claude-code"]);
+    }
+
+    #[test]
+    fn test_claude_code_config_round_trip() {
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    extra_known_marketplaces: vec![
+                        MarketplaceEntry {
+                            name: "my-plugins".to_string(),
+                            repo: "owner/my-plugins".to_string(),
+                        },
+                        MarketplaceEntry {
+                            name: "team-plugins".to_string(),
+                            repo: "org/team-plugins".to_string(),
+                        },
+                    ],
+                    enabled_plugins: vec![
+                        "pkm@my-plugins".to_string(),
+                        "eng@team-plugins".to_string(),
+                    ],
+                },
+            },
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let parsed: Config = toml::from_str(&toml_str).unwrap();
+
+        assert_eq!(
+            parsed.agents.claude_code.extra_known_marketplaces,
+            config.agents.claude_code.extra_known_marketplaces
+        );
+        assert_eq!(
+            parsed.agents.claude_code.enabled_plugins,
+            config.agents.claude_code.enabled_plugins
+        );
+    }
+
+    #[test]
+    fn test_claude_code_config_empty_suppressed_in_toml() {
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig::default(),
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        // Empty ClaudeCodeConfig should not produce [agents.claude-code] section header
+        assert!(
+            !toml_str.contains("[agents.claude-code]"),
+            "Empty claude-code config section should be suppressed in TOML:\n{toml_str}"
+        );
+    }
+
+    #[test]
+    fn test_missing_claude_code_section_deserializes() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+
+[agents]
+enabled = ["claude-code"]
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(
+            config
+                .agents
+                .claude_code
+                .extra_known_marketplaces
+                .is_empty()
+        );
+        assert!(config.agents.claude_code.enabled_plugins.is_empty());
+    }
+
+    #[test]
+    fn test_validate_duplicate_marketplace_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    extra_known_marketplaces: vec![
+                        MarketplaceEntry {
+                            name: "dupe".to_string(),
+                            repo: "owner/repo1".to_string(),
+                        },
+                        MarketplaceEntry {
+                            name: "dupe".to_string(),
+                            repo: "owner/repo2".to_string(),
+                        },
+                    ],
+                    enabled_plugins: vec![],
+                },
+            },
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("duplicate marketplace name"));
+    }
+
+    #[test]
+    fn test_validate_empty_marketplace_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    extra_known_marketplaces: vec![MarketplaceEntry {
+                        name: String::new(),
+                        repo: "owner/repo".to_string(),
+                    }],
+                    enabled_plugins: vec![],
+                },
+            },
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_invalid_marketplace_repo() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    extra_known_marketplaces: vec![MarketplaceEntry {
+                        name: "test".to_string(),
+                        repo: "no-slash".to_string(),
+                    }],
+                    enabled_plugins: vec![],
+                },
+            },
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("owner/repo"));
+    }
+
+    #[test]
+    fn test_validate_repo_with_multiple_slashes() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    extra_known_marketplaces: vec![MarketplaceEntry {
+                        name: "test".to_string(),
+                        repo: "a/b/c".to_string(),
+                    }],
+                    enabled_plugins: vec![],
+                },
+            },
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("owner/repo"));
+    }
+
+    #[test]
+    fn test_validate_plugin_empty_parts() {
+        let dir = tempfile::tempdir().unwrap();
+        // "@marketplace" — empty plugin name
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    extra_known_marketplaces: vec![],
+                    enabled_plugins: vec!["@marketplace".to_string()],
+                },
+            },
+        };
+        assert!(config.validate().is_err());
+
+        // "plugin@" — empty marketplace name
+        let config2 = Config {
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    extra_known_marketplaces: vec![],
+                    enabled_plugins: vec!["plugin@".to_string()],
+                },
+            },
+            ..config.clone()
+        };
+        assert!(config2.validate().is_err());
+
+        // "@" — both parts empty
+        let config3 = Config {
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    extra_known_marketplaces: vec![],
+                    enabled_plugins: vec!["@".to_string()],
+                },
+            },
+            ..config
+        };
+        assert!(config3.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_invalid_plugin_format() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    extra_known_marketplaces: vec![],
+                    enabled_plugins: vec!["no-at-sign".to_string()],
+                },
+            },
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("pluginName@marketplaceName"));
     }
 }
