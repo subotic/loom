@@ -202,6 +202,15 @@ impl GitRepo {
         Ok(!output.stdout.trim().is_empty())
     }
 
+    /// Check if a ref exists (local branch, remote ref, tag, or arbitrary ref).
+    pub fn ref_exists(&self, refspec: &str) -> Result<bool, GitError> {
+        let output = self
+            .git()
+            .args(&["rev-parse", "--verify", refspec])
+            .run_unchecked()?;
+        Ok(output.exit_code == 0)
+    }
+
     // --- Remote operations ---
 
     /// Push a branch and set up tracking
@@ -609,5 +618,66 @@ branch refs/heads/main";
         let repo = GitRepo::new(local_path);
         // Remote ref exists after fetch — should return origin/main
         assert_eq!(repo.resolve_start_point("main"), "origin/main");
+    }
+
+    #[test]
+    fn test_ref_exists_local_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path();
+
+        std::process::Command::new("git")
+            .args(["init", "-b", "main", &path.to_string_lossy()])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["-C", &path.to_string_lossy(), "commit", "--allow-empty", "-m", "init"])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+
+        let repo = GitRepo::new(path);
+        assert!(repo.ref_exists("main").unwrap());
+        assert!(!repo.ref_exists("nonexistent").unwrap());
+    }
+
+    #[test]
+    fn test_ref_exists_remote_ref() {
+        // Create "remote" repo
+        let remote_dir = tempfile::tempdir().unwrap();
+        let remote_path = remote_dir.path();
+        std::process::Command::new("git")
+            .args(["init", "-b", "main", &remote_path.to_string_lossy()])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["-C", &remote_path.to_string_lossy(), "commit", "--allow-empty", "-m", "init"])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+
+        // Create local repo with remote
+        let local_dir = tempfile::tempdir().unwrap();
+        let local_path = local_dir.path();
+        std::process::Command::new("git")
+            .args(["init", "-b", "main", &local_path.to_string_lossy()])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["-C", &local_path.to_string_lossy(), "remote", "add", "origin", &remote_path.to_string_lossy()])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["-C", &local_path.to_string_lossy(), "fetch", "origin"])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+
+        let repo = GitRepo::new(local_path);
+        assert!(repo.ref_exists("origin/main").unwrap());
+        assert!(!repo.ref_exists("origin/nonexistent").unwrap());
     }
 }

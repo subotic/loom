@@ -45,13 +45,20 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
         anyhow::bail!("Select at least one repository. A workspace requires at least one repo.");
     }
 
-    // If --base is set, validate all repos have the branch
+    // If --base is set, fetch and validate all repos have the ref
     if let Some(ref base) = opts.base_branch {
         for repo in &opts.repos {
             let git_repo = GitRepo::new(&repo.path);
-            if !git_repo.branch_exists(base)? {
+            // Fetch so remote refs are available for validation
+            if let Err(e) = git_repo.fetch() {
+                eprintln!(
+                    "  Warning: could not fetch '{}': {}. Using local state.",
+                    repo.name, e
+                );
+            }
+            if !git_repo.ref_exists(base)? {
                 anyhow::bail!(
-                    "Branch '{}' not found in {}. All repos must have the base branch when using --base.",
+                    "Ref '{}' not found in {} (checked local and remote refs).",
                     base,
                     repo.name
                 );
