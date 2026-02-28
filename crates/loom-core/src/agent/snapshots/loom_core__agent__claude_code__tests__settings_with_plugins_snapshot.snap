@@ -1,0 +1,21 @@
+---
+source: crates/loom-core/src/agent/claude_code.rs
+expression: content
+---
+{
+  "additionalDirectories": [
+    "/loom/my-feature/dsp-api",
+    "/loom/my-feature/dsp-das"
+  ],
+  "enabledPlugins": {
+    "pkm@test-marketplace": true
+  },
+  "extraKnownMarketplaces": {
+    "test-marketplace": {
+      "source": {
+        "repo": "org/test-plugins",
+        "source": "github"
+      }
+    }
+  }
+}

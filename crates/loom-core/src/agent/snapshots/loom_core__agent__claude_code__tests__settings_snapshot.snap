@@ -1,6 +1,5 @@
 ---
 source: crates/loom-core/src/agent/claude_code.rs
-assertion_line: 137
 expression: content
 ---
 {

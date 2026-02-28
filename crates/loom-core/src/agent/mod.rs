@@ -22,7 +22,8 @@ pub trait AgentGenerator {
     fn name(&self) -> &str;
 
     /// Generate files for the given workspace.
-    fn generate(&self, manifest: &WorkspaceManifest) -> Result<Vec<GeneratedFile>>;
+    fn generate(&self, manifest: &WorkspaceManifest, config: &Config)
+    -> Result<Vec<GeneratedFile>>;
 }
 
 /// Run all enabled agent generators and write their files into the workspace.
@@ -42,8 +43,29 @@ pub fn generate_agent_files(
             }
         };
 
-        let files = generator.generate(manifest)?;
+        // Clean up legacy files from previous versions
+        if agent_name == "claude-code" {
+            let legacy = ws_path.join(".claude/settings.local.json");
+            if legacy.exists() {
+                std::fs::remove_file(&legacy)?;
+            }
+        }
+
+        let files = generator.generate(manifest, config)?;
         for file in &files {
+            // Guard against path traversal and absolute paths in relative_path
+            let rel = std::path::Path::new(&file.relative_path);
+            if rel.is_absolute()
+                || rel
+                    .components()
+                    .any(|c| c == std::path::Component::ParentDir)
+            {
+                anyhow::bail!(
+                    "Agent '{}' produced an invalid relative path: {}",
+                    agent_name,
+                    file.relative_path
+                );
+            }
             let full_path = ws_path.join(&file.relative_path);
             if let Some(parent) = full_path.parent() {
                 std::fs::create_dir_all(parent)?;
@@ -78,6 +100,7 @@ mod tests {
             defaults: DefaultsConfig::default(),
             agents: AgentsConfig {
                 enabled: vec!["claude-code".to_string()],
+                ..Default::default()
             },
         };
 
@@ -97,7 +120,45 @@ mod tests {
         generate_agent_files(&config, &ws_path, &manifest).unwrap();
 
         assert!(ws_path.join("CLAUDE.md").exists());
-        assert!(ws_path.join(".claude/settings.local.json").exists());
+        assert!(ws_path.join(".claude/settings.json").exists());
+    }
+
+    #[test]
+    fn test_generate_agent_files_removes_legacy_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws_path = dir.path().join("my-ws");
+        let legacy_path = ws_path.join(".claude/settings.local.json");
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        std::fs::write(&legacy_path, "{}").unwrap();
+        assert!(legacy_path.exists());
+
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                ..Default::default()
+            },
+        };
+
+        let manifest = WorkspaceManifest {
+            name: "my-ws".to_string(),
+            created: chrono::Utc::now(),
+            base_branch: None,
+            repos: vec![],
+        };
+
+        generate_agent_files(&config, &ws_path, &manifest).unwrap();
+
+        // Legacy file should be removed
+        assert!(!legacy_path.exists());
+        // New file should exist
+        assert!(ws_path.join(".claude/settings.json").exists());
     }
 
     #[test]
@@ -116,6 +177,7 @@ mod tests {
             defaults: DefaultsConfig::default(),
             agents: AgentsConfig {
                 enabled: vec!["unknown-agent".to_string()],
+                ..Default::default()
             },
         };
 
@@ -133,6 +195,28 @@ mod tests {
         assert!(!ws_path.join("CLAUDE.md").exists());
     }
 
+    /// Helper: test the path traversal guard in isolation.
+    fn is_safe_relative_path(path: &str) -> bool {
+        use std::path::{Component, Path};
+        let p = Path::new(path);
+        !p.is_absolute() && !p.components().any(|c| c == Component::ParentDir)
+    }
+
+    #[test]
+    fn test_path_traversal_guard() {
+        // Safe paths
+        assert!(is_safe_relative_path("CLAUDE.md"));
+        assert!(is_safe_relative_path(".claude/settings.json"));
+
+        // Path traversal with ..
+        assert!(!is_safe_relative_path("../etc/passwd"));
+        assert!(!is_safe_relative_path("foo/../../bar"));
+
+        // Absolute paths
+        assert!(!is_safe_relative_path("/etc/passwd"));
+        assert!(!is_safe_relative_path("/tmp/evil"));
+    }
+
     #[test]
     fn test_generate_agent_files_no_agents() {
         let dir = tempfile::tempdir().unwrap();
@@ -147,7 +231,10 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
-            agents: AgentsConfig { enabled: vec![] },
+            agents: AgentsConfig {
+                enabled: vec![],
+                ..Default::default()
+            },
         };
 
         let manifest = WorkspaceManifest {
