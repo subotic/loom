@@ -42,6 +42,9 @@ pub enum Command {
         /// Repos to include (comma-separated, non-interactive mode)
         #[arg(long, value_delimiter = ',')]
         repos: Option<Vec<String>>,
+        /// Permission preset name (from config.toml)
+        #[arg(long, value_name = "NAME")]
+        preset: Option<String>,
     },
 
     /// Add a repo to an existing workspace
@@ -117,6 +120,9 @@ pub enum Command {
     Refresh {
         /// Workspace name (optional — detects from cwd if inside a workspace)
         name: Option<String>,
+        /// Update the workspace's permission preset (empty string to remove)
+        #[arg(long, value_name = "NAME")]
+        preset: Option<String>,
     },
 
     /// Generate shell completions
@@ -522,6 +528,7 @@ impl Cli {
         name: String,
         base: Option<String>,
         repos_filter: Option<Vec<String>>,
+        preset: Option<String>,
     ) -> anyhow::Result<()> {
         use dialoguer::MultiSelect;
         use loom_core::config::ensure_config_loaded;
@@ -613,6 +620,7 @@ impl Cli {
                 name,
                 repos: selected_repos,
                 base_branch: base,
+                preset,
             },
         )?;
 
@@ -638,15 +646,53 @@ impl Cli {
         Ok(())
     }
 
-    fn run_refresh(name: Option<String>) -> anyhow::Result<()> {
+    fn run_refresh(name: Option<String>, preset: Option<String>) -> anyhow::Result<()> {
         use loom_core::agent::generate_agent_files;
         use loom_core::config::ensure_config_loaded;
+        use loom_core::manifest;
         use loom_core::workspace;
 
         let config = ensure_config_loaded()?;
         let cwd = std::env::current_dir()?;
 
-        let (ws_path, manifest) = workspace::resolve_workspace(name.as_deref(), &cwd, &config)?;
+        let (ws_path, mut manifest) =
+            workspace::resolve_workspace(name.as_deref(), &cwd, &config)?;
+
+        // Update preset if --preset was provided
+        if let Some(ref preset_value) = preset {
+            if preset_value.is_empty() {
+                // --preset "" removes the preset
+                manifest.preset = None;
+            } else {
+                // Validate preset exists in config
+                if !config.agents.claude_code.presets.contains_key(preset_value) {
+                    let available: Vec<&String> =
+                        config.agents.claude_code.presets.keys().collect();
+                    if available.is_empty() {
+                        anyhow::bail!(
+                            "Preset '{}' not found. No presets defined in config.toml.",
+                            preset_value
+                        );
+                    } else {
+                        anyhow::bail!(
+                            "Preset '{}' not found. Available presets: {}",
+                            preset_value,
+                            available
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        );
+                    }
+                }
+                manifest.preset = Some(preset_value.clone());
+            }
+            // Save updated manifest
+            manifest::write_manifest(
+                &ws_path.join(workspace::MANIFEST_FILENAME),
+                &manifest,
+            )?;
+        }
 
         generate_agent_files(&config, &ws_path, &manifest)?;
 
@@ -749,8 +795,13 @@ impl Cli {
             Command::Init => {
                 self.run_init()?;
             }
-            Command::New { name, base, repos } => {
-                Self::run_new(name, base, repos)?;
+            Command::New {
+                name,
+                base,
+                repos,
+                preset,
+            } => {
+                Self::run_new(name, base, repos, preset)?;
             }
             Command::Add { repo, workspace } => {
                 Self::run_add(repo, workspace)?;
@@ -782,8 +833,8 @@ impl Cli {
             Command::Shell { name } => {
                 Self::run_shell(name)?;
             }
-            Command::Refresh { name } => {
-                Self::run_refresh(name)?;
+            Command::Refresh { name, preset } => {
+                Self::run_refresh(name, preset)?;
             }
             Command::Completions { shell } => {
                 use clap::CommandFactory;

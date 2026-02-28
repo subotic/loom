@@ -509,6 +509,7 @@ impl App {
                                 name: name.clone(),
                                 repos,
                                 base_branch: None,
+                                preset: None,
                             },
                         ) {
                             Ok(result) => {
