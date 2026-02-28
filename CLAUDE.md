@@ -22,7 +22,7 @@ This repo uses **rebase merges only** — every commit lands on `main` as-is. Co
   - `docs:` — documentation only
   - `build:` — build system, dependencies
   - `chore:` — maintenance tasks
-- **Scopes** match crate modules: `workspace`, `git`, `config`, `manifest`, `sync`, `tui`, `agent`, `registry`, `cli`.
+- **Scopes** match crate modules: `workspace`, `git`, `config`, `manifest`, `sync`, `tui`, `agent`, `registry`, `cli`. Non-code scopes: `learnings`, `ci`.
 - **First line** is the changelog entry — write it for humans. Explain *what* changed, not *how*.
 - **Body** (optional) explains *why* — the motivation, trade-offs, or context that isn't obvious from the diff.
 - **Breaking changes:** add `!` after the type (e.g., `feat(config)!:`) and include a `BREAKING CHANGE:` footer.
