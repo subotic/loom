@@ -18,7 +18,11 @@ impl AgentGenerator for ClaudeCodeGenerator {
         config: &Config,
     ) -> Result<Vec<GeneratedFile>> {
         let claude_md = generate_claude_md(manifest);
-        let settings = generate_settings(manifest, &config.agents.claude_code);
+        let settings = generate_settings(
+            manifest,
+            &config.agents.claude_code,
+            manifest.preset.as_deref(),
+        );
 
         Ok(vec![
             GeneratedFile {
@@ -74,9 +78,12 @@ fn generate_claude_md(manifest: &WorkspaceManifest) -> String {
 }
 
 /// Generate .claude/settings.json content.
+///
+/// If `preset_name` is provided, merges the named preset's settings with global config.
 fn generate_settings(
     manifest: &WorkspaceManifest,
     cc_config: &crate::config::ClaudeCodeConfig,
+    preset_name: Option<&str>,
 ) -> String {
     let paths: Vec<String> = manifest
         .repos
@@ -113,6 +120,100 @@ fn generate_settings(
         obj["enabledPlugins"] = serde_json::Value::Object(plugins);
     }
 
+    // Resolve the preset (if any)
+    let preset = preset_name.and_then(|name| cc_config.presets.get(name));
+
+    // Build permissions.allow from global + preset allowed_tools
+    let mut allow: Vec<String> = cc_config.allowed_tools.clone();
+    if let Some(p) = preset {
+        allow.extend(p.allowed_tools.iter().cloned());
+    }
+    allow.sort();
+    allow.dedup();
+    if !allow.is_empty() {
+        obj["permissions"] = serde_json::json!({ "allow": allow });
+    }
+
+    // Build sandbox from global config + preset arrays
+    if !cc_config.sandbox.is_empty() || preset.is_some_and(|p| !p.sandbox.is_empty()) {
+        let sandbox = &cc_config.sandbox;
+        let mut sandbox_obj = serde_json::Map::new();
+
+        if let Some(enabled) = sandbox.enabled {
+            sandbox_obj.insert("enabled".to_string(), serde_json::json!(enabled));
+        }
+        if let Some(auto_allow) = sandbox.auto_allow {
+            sandbox_obj.insert(
+                "autoAllowBashIfSandboxed".to_string(),
+                serde_json::json!(auto_allow),
+            );
+        }
+        if !sandbox.excluded_commands.is_empty() {
+            sandbox_obj.insert(
+                "excludedCommands".to_string(),
+                serde_json::json!(sandbox.excluded_commands),
+            );
+        }
+        if let Some(allow_unsandboxed) = sandbox.allow_unsandboxed_commands {
+            sandbox_obj.insert(
+                "allowUnsandboxedCommands".to_string(),
+                serde_json::json!(allow_unsandboxed),
+            );
+        }
+
+        // Merge filesystem arrays: global ∪ preset
+        let mut allow_write = sandbox.filesystem.allow_write.clone();
+        let mut deny_write = sandbox.filesystem.deny_write.clone();
+        let mut deny_read = sandbox.filesystem.deny_read.clone();
+        if let Some(p) = preset {
+            allow_write.extend(p.sandbox.filesystem.allow_write.iter().cloned());
+            deny_write.extend(p.sandbox.filesystem.deny_write.iter().cloned());
+            deny_read.extend(p.sandbox.filesystem.deny_read.iter().cloned());
+        }
+        allow_write.sort();
+        allow_write.dedup();
+        deny_write.sort();
+        deny_write.dedup();
+        deny_read.sort();
+        deny_read.dedup();
+
+        if !allow_write.is_empty() || !deny_write.is_empty() || !deny_read.is_empty() {
+            let mut fs_obj = serde_json::Map::new();
+            if !allow_write.is_empty() {
+                fs_obj.insert("allowWrite".to_string(), serde_json::json!(allow_write));
+            }
+            if !deny_write.is_empty() {
+                fs_obj.insert("denyWrite".to_string(), serde_json::json!(deny_write));
+            }
+            if !deny_read.is_empty() {
+                fs_obj.insert("denyRead".to_string(), serde_json::json!(deny_read));
+            }
+            sandbox_obj.insert(
+                "filesystem".to_string(),
+                serde_json::Value::Object(fs_obj),
+            );
+        }
+
+        // Merge network arrays: global ∪ preset
+        let mut allowed_domains = sandbox.network.allowed_domains.clone();
+        if let Some(p) = preset {
+            allowed_domains.extend(p.sandbox.network.allowed_domains.iter().cloned());
+        }
+        allowed_domains.sort();
+        allowed_domains.dedup();
+
+        if !allowed_domains.is_empty() {
+            sandbox_obj.insert(
+                "network".to_string(),
+                serde_json::json!({ "allowedDomains": allowed_domains }),
+            );
+        }
+
+        if !sandbox_obj.is_empty() {
+            obj["sandbox"] = serde_json::Value::Object(sandbox_obj);
+        }
+    }
+
     serde_json::to_string_pretty(&obj).expect("serde_json::Value is always serializable")
 }
 
@@ -120,9 +221,11 @@ fn generate_settings(
 mod tests {
     use super::*;
     use crate::config::{
-        AgentsConfig, ClaudeCodeConfig, DefaultsConfig, MarketplaceEntry, RegistryConfig,
-        WorkspaceConfig,
+        AgentsConfig, ClaudeCodeConfig, DefaultsConfig, MarketplaceEntry, PermissionPreset,
+        PresetSandboxConfig, RegistryConfig, SandboxConfig, SandboxFilesystemConfig,
+        SandboxNetworkConfig, WorkspaceConfig,
     };
+    use std::collections::BTreeMap;
     use crate::manifest::RepoManifestEntry;
     use std::path::PathBuf;
 
@@ -133,6 +236,7 @@ mod tests {
                 .unwrap()
                 .with_timezone(&chrono::Utc),
             base_branch: Some("main".to_string()),
+            preset: None,
             repos: vec![
                 RepoManifestEntry {
                     name: "dsp-api".to_string(),
@@ -176,7 +280,7 @@ mod tests {
     fn test_settings_snapshot() {
         let manifest = test_manifest();
         let cc_config = ClaudeCodeConfig::default();
-        let content = generate_settings(&manifest, &cc_config);
+        let content = generate_settings(&manifest, &cc_config, None);
         insta::assert_snapshot!(content);
     }
 
@@ -191,7 +295,7 @@ mod tests {
             enabled_plugins: vec!["pkm@test-marketplace".to_string()],
             ..Default::default()
         };
-        let content = generate_settings(&manifest, &cc_config);
+        let content = generate_settings(&manifest, &cc_config, None);
         insta::assert_snapshot!(content);
     }
 
@@ -201,6 +305,7 @@ mod tests {
             name: "empty-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![],
         };
 
@@ -215,11 +320,12 @@ mod tests {
             name: "empty-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![],
         };
 
         let cc_config = ClaudeCodeConfig::default();
-        let content = generate_settings(&manifest, &cc_config);
+        let content = generate_settings(&manifest, &cc_config, None);
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         let dirs = parsed["additionalDirectories"].as_array().unwrap();
         assert!(dirs.is_empty());
@@ -253,6 +359,7 @@ mod tests {
             name: "local-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![RepoManifestEntry {
                 name: "my-repo".to_string(),
                 original_path: PathBuf::from("/code/my-repo"),
@@ -277,7 +384,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let content = generate_settings(&manifest, &cc_config);
+        let content = generate_settings(&manifest, &cc_config, None);
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert!(parsed.get("extraKnownMarketplaces").is_some());
         assert!(parsed.get("enabledPlugins").is_none());
@@ -290,9 +397,172 @@ mod tests {
             enabled_plugins: vec!["pkm@global-marketplace".to_string()],
             ..Default::default()
         };
-        let content = generate_settings(&manifest, &cc_config);
+        let content = generate_settings(&manifest, &cc_config, None);
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert!(parsed.get("extraKnownMarketplaces").is_none());
         assert!(parsed.get("enabledPlugins").is_some());
+    }
+
+    #[test]
+    fn test_settings_with_permissions_snapshot() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            allowed_tools: vec![
+                "Bash(gh issue *)".to_string(),
+                "Bash(gh run *)".to_string(),
+                "WebFetch(domain:docs.rs)".to_string(),
+            ],
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_with_sandbox_snapshot() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            sandbox: SandboxConfig {
+                enabled: Some(true),
+                auto_allow: Some(true),
+                excluded_commands: vec!["docker".to_string()],
+                allow_unsandboxed_commands: Some(false),
+                filesystem: SandboxFilesystemConfig {
+                    allow_write: vec!["~/.config/loom".to_string()],
+                    ..Default::default()
+                },
+                network: SandboxNetworkConfig {
+                    allowed_domains: vec!["github.com".to_string()],
+                },
+            },
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_with_preset_snapshot() {
+        let manifest = test_manifest();
+
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "rust".to_string(),
+            PermissionPreset {
+                allowed_tools: vec![
+                    "Bash(cargo clippy *)".to_string(),
+                    "Bash(cargo fmt *)".to_string(),
+                    "Bash(cargo test *)".to_string(),
+                ],
+                sandbox: PresetSandboxConfig {
+                    filesystem: SandboxFilesystemConfig {
+                        allow_write: vec!["~/.cargo".to_string()],
+                        ..Default::default()
+                    },
+                    network: SandboxNetworkConfig {
+                        allowed_domains: vec!["crates.io".to_string(), "docs.rs".to_string()],
+                    },
+                },
+            },
+        );
+
+        let cc_config = ClaudeCodeConfig {
+            allowed_tools: vec![
+                "Bash(gh issue *)".to_string(),
+                "Bash(gh run *)".to_string(),
+                "WebFetch(domain:docs.rs)".to_string(),
+            ],
+            sandbox: SandboxConfig {
+                enabled: Some(true),
+                auto_allow: Some(true),
+                excluded_commands: vec!["docker".to_string()],
+                allow_unsandboxed_commands: Some(false),
+                filesystem: SandboxFilesystemConfig {
+                    allow_write: vec!["~/.config/loom".to_string()],
+                    ..Default::default()
+                },
+                network: SandboxNetworkConfig {
+                    allowed_domains: vec!["github.com".to_string()],
+                },
+            },
+            presets,
+            ..Default::default()
+        };
+
+        let content = generate_settings(&manifest, &cc_config, Some("rust"));
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_with_all_features_snapshot() {
+        let manifest = test_manifest();
+
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "rust".to_string(),
+            PermissionPreset {
+                allowed_tools: vec!["Bash(cargo test *)".to_string()],
+                sandbox: PresetSandboxConfig {
+                    filesystem: SandboxFilesystemConfig {
+                        allow_write: vec!["~/.cargo".to_string()],
+                        ..Default::default()
+                    },
+                    network: SandboxNetworkConfig {
+                        allowed_domains: vec!["docs.rs".to_string()],
+                    },
+                },
+            },
+        );
+
+        let cc_config = ClaudeCodeConfig {
+            extra_known_marketplaces: vec![MarketplaceEntry {
+                name: "test-marketplace".to_string(),
+                repo: "org/test-plugins".to_string(),
+            }],
+            enabled_plugins: vec!["pkm@test-marketplace".to_string()],
+            allowed_tools: vec!["Bash(gh issue *)".to_string()],
+            sandbox: SandboxConfig {
+                enabled: Some(true),
+                auto_allow: Some(true),
+                excluded_commands: vec!["docker".to_string()],
+                allow_unsandboxed_commands: None,
+                filesystem: SandboxFilesystemConfig {
+                    allow_write: vec!["~/.config/loom".to_string()],
+                    ..Default::default()
+                },
+                network: SandboxNetworkConfig {
+                    allowed_domains: vec!["github.com".to_string()],
+                },
+            },
+            presets,
+        };
+
+        let content = generate_settings(&manifest, &cc_config, Some("rust"));
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_no_permissions_when_empty() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig::default();
+        let content = generate_settings(&manifest, &cc_config, None);
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(parsed.get("permissions").is_none());
+        assert!(parsed.get("sandbox").is_none());
+    }
+
+    #[test]
+    fn test_settings_preset_not_found_uses_global_only() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            allowed_tools: vec!["Bash(gh issue *)".to_string()],
+            ..Default::default()
+        };
+        // Non-existent preset — only global tools should appear
+        let content = generate_settings(&manifest, &cc_config, Some("nonexistent"));
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let allow = parsed["permissions"]["allow"].as_array().unwrap();
+        assert_eq!(allow.len(), 1);
+        assert_eq!(allow[0], "Bash(gh issue *)");
     }
 }
