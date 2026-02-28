@@ -32,6 +32,7 @@ fn test_workspace_detection_integration() {
         name: ws_name.to_string(),
         created: chrono::Utc::now(),
         base_branch: Some("main".to_string()),
+        preset: None,
         repos: vec![],
     };
     loom_core::manifest::write_manifest(

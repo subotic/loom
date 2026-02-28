@@ -127,6 +127,7 @@ mod tests {
             name: "test-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![RepoManifestEntry {
                 name: "my-repo".to_string(),
                 original_path: repo_path.clone(),
@@ -157,6 +158,7 @@ mod tests {
             name: "test-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![RepoManifestEntry {
                 name: "my-repo".to_string(),
                 original_path: repo_path.clone(),
@@ -180,6 +182,7 @@ mod tests {
             name: "test-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![RepoManifestEntry {
                 name: "my-repo".to_string(),
                 original_path: dir.path().join("nonexistent"),

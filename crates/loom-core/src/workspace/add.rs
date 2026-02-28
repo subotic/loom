@@ -164,6 +164,7 @@ mod tests {
             name: "test-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![],
         };
         manifest::write_manifest(&ws_path.join(MANIFEST_FILENAME), &manifest).unwrap();
@@ -198,6 +199,7 @@ mod tests {
             name: "test-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![RepoManifestEntry {
                 name: "existing-repo".to_string(),
                 original_path: dir.path().join("repos").join("existing-repo"),

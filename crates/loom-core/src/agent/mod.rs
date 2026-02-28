@@ -108,6 +108,7 @@ mod tests {
             name: "my-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![RepoManifestEntry {
                 name: "dsp-api".to_string(),
                 original_path: PathBuf::from("/code/dasch-swiss/dsp-api"),
@@ -150,6 +151,7 @@ mod tests {
             name: "my-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![],
         };
 
@@ -185,6 +187,7 @@ mod tests {
             name: "my-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![],
         };
 
@@ -241,6 +244,7 @@ mod tests {
             name: "my-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![],
         };
 
