@@ -216,6 +216,20 @@ impl GitRepo {
         Ok(())
     }
 
+    /// Resolve the best available start point for a new worktree.
+    /// Prefers origin/{branch} (freshest state), falls back to local {branch}.
+    pub fn resolve_start_point(&self, branch: &str) -> String {
+        let remote_ref = format!("origin/{}", branch);
+        let check = self
+            .git()
+            .args(&["rev-parse", "--verify", &remote_ref])
+            .run_unchecked();
+        match check {
+            Ok(output) if output.exit_code == 0 => remote_ref,
+            _ => branch.to_string(),
+        }
+    }
+
     /// Pull with rebase from origin
     pub fn pull_rebase(&self) -> Result<(), GitError> {
         self.git().args(&["pull", "--rebase"]).run()?;
