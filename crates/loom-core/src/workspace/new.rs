@@ -149,12 +149,23 @@ fn add_repo_to_workspace(
 ) -> Result<RepoManifestEntry> {
     let git_repo = GitRepo::new(&repo.path);
 
+    // Fetch latest state from origin (non-fatal)
+    if let Err(e) = git_repo.fetch() {
+        eprintln!(
+            "  Warning: could not fetch '{}': {}. Using local state.",
+            repo.name, e
+        );
+    }
+
     // Determine base branch
     let base = match base_branch {
         Some(b) => b.to_string(),
-        None => git_repo
-            .default_branch()
-            .unwrap_or_else(|_| "main".to_string()),
+        None => {
+            let branch = git_repo
+                .default_branch()
+                .unwrap_or_else(|_| "main".to_string());
+            git_repo.resolve_start_point(&branch)
+        }
     };
 
     // Targeted stale cleanup: remove only LOOM-owned stale worktrees

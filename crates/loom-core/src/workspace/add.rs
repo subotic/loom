@@ -29,12 +29,23 @@ pub fn add_repo(
 
     let git_repo = GitRepo::new(&repo.path);
 
+    // Fetch latest state from origin (non-fatal)
+    if let Err(e) = git_repo.fetch() {
+        eprintln!(
+            "  Warning: could not fetch '{}': {}. Using local state.",
+            repo.name, e
+        );
+    }
+
     // Determine base branch
     let base = match &manifest.base_branch {
         Some(b) => b.clone(),
-        None => git_repo
-            .default_branch()
-            .unwrap_or_else(|_| "main".to_string()),
+        None => {
+            let branch = git_repo
+                .default_branch()
+                .unwrap_or_else(|_| "main".to_string());
+            git_repo.resolve_start_point(&branch)
+        }
     };
 
     // Create worktree
