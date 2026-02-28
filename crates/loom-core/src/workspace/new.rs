@@ -22,6 +22,7 @@ pub struct NewWorkspaceOpts {
     pub name: String,
     pub repos: Vec<RepoEntry>,
     pub base_branch: Option<String>,
+    pub preset: Option<String>,
 }
 
 /// Create a new workspace with worktrees for the selected repos.
@@ -43,6 +44,29 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
     // Validate repos
     if opts.repos.is_empty() {
         anyhow::bail!("Select at least one repository. A workspace requires at least one repo.");
+    }
+
+    // Validate preset exists in config (if provided)
+    if let Some(ref preset_name) = opts.preset {
+        if !config.agents.claude_code.presets.contains_key(preset_name) {
+            let available: Vec<&String> = config.agents.claude_code.presets.keys().collect();
+            if available.is_empty() {
+                anyhow::bail!(
+                    "Preset '{}' not found. No presets defined in config.toml.",
+                    preset_name
+                );
+            } else {
+                anyhow::bail!(
+                    "Preset '{}' not found. Available presets: {}",
+                    preset_name,
+                    available
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        }
     }
 
     // If --base is set, fetch and validate all repos have the ref
@@ -102,7 +126,7 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
         name: opts.name.clone(),
         created: now,
         base_branch: opts.base_branch.clone(),
-        preset: None,
+        preset: opts.preset.clone(),
         repos: Vec::new(),
     };
 
@@ -319,6 +343,7 @@ mod tests {
                 name: "test-ws".to_string(),
                 repos: vec![repo],
                 base_branch: None,
+                preset: None,
             },
         )
         .unwrap();
@@ -344,6 +369,7 @@ mod tests {
                 name: "existing".to_string(),
                 repos: vec![repo],
                 base_branch: None,
+                preset: None,
             },
         );
 
@@ -362,6 +388,7 @@ mod tests {
                 name: "empty".to_string(),
                 repos: vec![],
                 base_branch: None,
+                preset: None,
             },
         );
 
@@ -380,6 +407,7 @@ mod tests {
                 name: "INVALID NAME".to_string(),
                 repos: vec![],
                 base_branch: None,
+                preset: None,
             },
         );
 
@@ -398,6 +426,7 @@ mod tests {
                 name: "state-test".to_string(),
                 repos: vec![repo],
                 base_branch: None,
+                preset: None,
             },
         )
         .unwrap();
