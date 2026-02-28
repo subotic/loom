@@ -57,11 +57,20 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
                 );
             }
             if !git_repo.ref_exists(base)? {
-                anyhow::bail!(
-                    "Ref '{}' not found in {} (checked local and remote refs).",
-                    base,
-                    repo.name
-                );
+                let hint = if !base.contains('/') {
+                    let remote_ref = format!("origin/{}", base);
+                    if git_repo.ref_exists(&remote_ref).unwrap_or(false) {
+                        format!(
+                            "\nHint: 'origin/{}' exists — use `--base origin/{}` for remote branches.",
+                            base, base
+                        )
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                };
+                anyhow::bail!("Ref '{}' not found in {}.{}", base, repo.name, hint);
             }
         }
     }
