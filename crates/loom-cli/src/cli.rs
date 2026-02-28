@@ -113,6 +113,12 @@ pub enum Command {
         name: Option<String>,
     },
 
+    /// Regenerate agent files from current config
+    Refresh {
+        /// Workspace name (optional — detects from cwd if inside a workspace)
+        name: Option<String>,
+    },
+
     /// Generate shell completions
     Completions {
         /// Shell to generate for
@@ -632,6 +638,22 @@ impl Cli {
         Ok(())
     }
 
+    fn run_refresh(name: Option<String>) -> anyhow::Result<()> {
+        use loom_core::agent::generate_agent_files;
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::workspace;
+
+        let config = ensure_config_loaded()?;
+        let cwd = std::env::current_dir()?;
+
+        let (ws_path, manifest) = workspace::resolve_workspace(name.as_deref(), &cwd, &config)?;
+
+        generate_agent_files(&config, &ws_path, &manifest)?;
+
+        println!("Refreshed agent files for workspace '{}'.", manifest.name);
+        Ok(())
+    }
+
     fn run_tui() -> anyhow::Result<()> {
         use loom_core::config::ensure_config_loaded;
         use loom_core::tui::run_tui;
@@ -759,6 +781,9 @@ impl Cli {
             }
             Command::Shell { name } => {
                 Self::run_shell(name)?;
+            }
+            Command::Refresh { name } => {
+                Self::run_refresh(name)?;
             }
             Command::Completions { shell } => {
                 use clap::CommandFactory;
