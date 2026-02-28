@@ -167,6 +167,7 @@ mod tests {
             name: "test".to_string(),
             created: chrono::Utc::now(),
             base_branch: Some("main".to_string()),
+            preset: None,
             repos: vec![],
         };
 

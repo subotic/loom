@@ -102,6 +102,7 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
         name: opts.name.clone(),
         created: now,
         base_branch: opts.base_branch.clone(),
+        preset: None,
         repos: Vec::new(),
     };
 

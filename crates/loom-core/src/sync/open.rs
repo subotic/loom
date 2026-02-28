@@ -149,6 +149,7 @@ pub fn open_workspace(config: &Config, name: &str) -> Result<OpenResult> {
         name: name.to_string(),
         created: sync_manifest.created,
         base_branch: None,
+        preset: None,
         repos: ws_repos,
     };
     manifest::write_manifest(&ws_path.join(MANIFEST_FILENAME), &ws_manifest)?;

@@ -11,6 +11,8 @@ pub struct WorkspaceManifest {
     pub created: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
     #[serde(default)]
     pub repos: Vec<RepoManifestEntry>,
 }
@@ -36,6 +38,7 @@ mod tests {
             name: "my-feature".to_string(),
             created: Utc::now(),
             base_branch: Some("main".to_string()),
+            preset: None,
             repos: vec![RepoManifestEntry {
                 name: "dsp-api".to_string(),
                 original_path: PathBuf::from("/code/dasch-swiss/dsp-api"),
@@ -60,6 +63,7 @@ mod tests {
             name: "test".to_string(),
             created: Utc::now(),
             base_branch: Some("develop".to_string()),
+            preset: None,
             repos: vec![],
         };
 

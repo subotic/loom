@@ -114,6 +114,7 @@ mod tests {
             name: "test-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![RepoManifestEntry {
                 name: "repo-a".to_string(),
                 original_path: dir.path().join("repo-a"),
@@ -139,6 +140,7 @@ mod tests {
             name: "test-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![RepoManifestEntry {
                 name: "repo-a".to_string(),
                 original_path: dir.path().join("repo-a"),

@@ -80,6 +80,7 @@ mod tests {
             name: name.to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![],
         };
 

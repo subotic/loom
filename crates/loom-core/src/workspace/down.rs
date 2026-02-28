@@ -210,6 +210,7 @@ mod tests {
             name: "test-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![entry],
         };
 
@@ -231,6 +232,7 @@ mod tests {
             name: "test-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![entry],
         };
 
@@ -250,6 +252,7 @@ mod tests {
             name: "test-ws".to_string(),
             created: chrono::Utc::now(),
             base_branch: None,
+            preset: None,
             repos: vec![entry],
         };
         manifest::write_manifest(&ws_path.join(MANIFEST_FILENAME), &manifest).unwrap();
