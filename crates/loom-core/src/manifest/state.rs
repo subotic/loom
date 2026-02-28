@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Global state index, stored at `~/loom/.loom/state.json`.
+/// Global state index, stored at `<workspace_root>/.loom/state.json`.
 ///
 /// Tracks all known workspaces for quick listing without scanning the filesystem.
 /// Written atomically with `.bak` backup for corruption recovery.

@@ -192,7 +192,7 @@ impl Cli {
         };
 
         // Workspace root
-        let default_ws = shellexpand::tilde("~/loom").to_string();
+        let default_ws = shellexpand::tilde("~/workspaces").to_string();
         let ws_input: String = Input::new()
             .with_prompt("Workspace root directory")
             .default(default_ws)

@@ -15,7 +15,7 @@ AI coding agents amplify the problem — they need clean, isolated, pre-configur
 LOOM creates a centralized workspace directory containing correlated git worktrees — one per repo, all on a namespaced branch (`loom/{workspace-name}`). The workspace is self-contained, isolated from your main checkouts, and disposable when done.
 
 ```
-~/loom/sipi-xyz/
+~/workspaces/sipi-xyz/
 ├── .loom.json          # workspace manifest
 ├── CLAUDE.md           # generated — agent context
 ├── .claude/
@@ -75,7 +75,7 @@ LOOM stores its config at `~/.config/loom/config.toml`:
 scan_roots = ["~/_github.com"]    # where to discover repos
 
 [workspace]
-root = "~/loom"                    # where workspaces live
+root = "~/workspaces"              # where workspaces live
 
 [sync]
 repo = "~/_github.com/user/pkm"   # git repo for cross-machine sync
