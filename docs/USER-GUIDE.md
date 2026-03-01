@@ -1114,3 +1114,332 @@ extra_known_marketplaces = [
 Agent files are regenerated automatically by: `loom new`, `loom add`, `loom remove`, `loom open`, `loom refresh`.
 
 > **Note:** After changing workspace composition (add/remove repos), restart Claude Code to pick up the updated `additionalDirectories`.
+
+---
+
+## Cross-Machine Sync
+
+LOOM supports restoring workspaces across machines using a **save/open** model (inspired by [chezmoi](https://www.chezmoi.io/)). Save publishes workspace state; open recreates it elsewhere.
+
+### Prerequisites
+
+- `[sync]` must be configured in `config.toml`
+- The sync repo must be a git repository with a remote
+
+### Saving (Machine A)
+
+`loom save` does two things:
+
+1. **Pushes workspace branches** to each repo's remote (`git push -u origin <branch>`)
+2. **Writes a sync manifest** (JSON) to the sync repo, commits, and pushes it
+
+```
+Machine A                     Git Remotes              Sync Repo
+─────────                     ───────────              ─────────
+loom save ──push branches──→  repo origins
+          ──write manifest──→                          {sync.repo}/{sync.path}/{name}.json
+          ──commit + push──→                           sync repo remote
+```
+
+`loom save` works **without** `[sync]` configured — it just pushes branches and skips the manifest.
+
+### Opening (Machine B)
+
+`loom open <name>` reconstructs a workspace from the sync manifest:
+
+1. **Pulls the sync repo** to get the latest manifests
+2. **Reads the manifest** for the named workspace
+3. **Clones missing repos** to `{first_scan_root}/{org}/{repo}`
+4. **Creates worktrees** and generates agent files
+
+```
+Sync Repo Remote              Machine B
+────────────────              ─────────
+          ←──git pull───────  loom open my-feature
+          ──read manifest──→  clone missing repos
+                              create worktrees
+                              generate agent files
+```
+
+`loom open` **requires** `[sync]` configured — it errors clearly if absent.
+
+### What Happens When...
+
+| Scenario | What Happens | Recovery |
+|----------|-------------|----------|
+| Save with no changes | Pushes sync manifest only | — |
+| Open with workspace already existing | Reconciles — adds missing repos | — |
+| Open with repo already cloned locally | Reuses existing clone | — |
+| Open with repo not cloned | Clones from `remoteUrl` in manifest | — |
+| Save with dirty repos | Skips dirty repos (unless `--force`) | Commit or stash, then re-save |
+| Two machines save concurrently | Last write wins (sync manifest overwritten) | Re-save from source machine |
+| Open after workspace was torn down on source | Still works — manifest persists in sync repo | — |
+
+### Conflict Handling
+
+Sync manifests use **last-write-wins** — there's no automatic merge. This is by design (simplicity over cleverness).
+
+- **Worst case:** a stale manifest causes `loom open` to create a workspace from old state
+- **Recovery:** `loom down` the stale workspace, then `loom save` from the source machine
+- **Prevention:** avoid saving the same workspace from multiple machines simultaneously
+
+### Asymmetry as a Feature
+
+`save` works without `[sync]` — it always pushes branches safely. `open` requires `[sync]` because it needs the manifest to know what to reconstruct. This asymmetry means `save` is always safe to run.
+
+---
+
+## TUI Guide
+
+Launch the interactive TUI with:
+
+```sh
+loom tui
+```
+
+### Screens and Keybindings
+
+#### WorkspaceList (main screen)
+
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Move down |
+| `k` / `↑` | Move up |
+| `Enter` | Open workspace detail |
+| `n` | Start new workspace wizard |
+| `r` | Refresh list |
+| `q` / `Esc` | Quit |
+
+**Columns:** `NAME`, `REPOS`, `STATUS`, `CREATED`
+
+> **Note:** The TUI list shows fewer columns than `loom list` (no BRANCH or PRESET columns).
+
+#### WorkspaceDetail
+
+| Key | Action |
+|-----|--------|
+| `Esc` | Back to list |
+| `d` | Tear down workspace (shows confirmation) |
+| `q` | Quit |
+
+Shows: workspace path, repo count, and per-repo table (REPO, BRANCH, STATUS, AHEAD/BEHIND).
+
+#### NewWizard (4 steps)
+
+| Step | Keys |
+|------|------|
+| **1. Enter name** | Type name, `Enter` to confirm (empty = random name), `Esc` to cancel |
+| **2. Select org groups** | `Space` to toggle, `Enter` to confirm, `Esc` to go back |
+| **3. Select repos** | `Space` to toggle, `Enter` to confirm, `Esc` to go back |
+| **4. Confirm** | `Enter` to create, `Esc` to go back |
+
+- If only one org exists, step 2 is skipped (auto-selected).
+- Name accepts lowercase alphanumeric + hyphens only.
+
+#### ConfirmDialog (teardown)
+
+| Key | Action |
+|-----|--------|
+| `y` | Confirm teardown |
+| `n` / `Esc` | Cancel |
+
+### TUI vs CLI Comparison
+
+| Feature | TUI | CLI |
+|---------|-----|-----|
+| Create workspace | Yes (wizard) | Yes (`loom new`) |
+| Choose name | Yes | Yes |
+| Random name | Yes (leave empty) | Yes (omit `[NAME]`) |
+| Select repos | Interactive toggle | `--repos` flag or interactive |
+| `--base` flag | No | Yes |
+| `--preset` flag | No | Yes |
+| `--repos` (non-interactive) | No | Yes |
+| View workspaces | Yes | `loom list` |
+| View workspace detail | Yes | `loom status` |
+| Tear down workspace | Yes | `loom down` |
+| `--force` teardown | No (uses safe delete) | Yes |
+| Dirty repo teardown | Fails (no interactive prompt) | Prompts interactively |
+| List columns | NAME, REPOS, STATUS, CREATED | NAME, REPOS, STATUS, BRANCH, PRESET, CREATED |
+
+**When to use the TUI:** Quick workspace creation and overview. **When to use the CLI:** Advanced flags (`--base`, `--preset`), scripting, force operations.
+
+---
+
+## Internal Files
+
+LOOM uses several JSON files to track state. Most are not meant for manual editing.
+
+### `.loom.json` — Workspace Manifest
+
+**Location:** `{workspace_root}/.loom.json` (per workspace)
+**Created by:** `loom new`
+**Updated by:** `loom add`, `loom remove`
+**Safe to edit manually:** Yes, carefully (e.g., change `preset`)
+
+```json
+{
+  "name": "my-feature",
+  "branch": "loom/bold-cedar-hawk",
+  "created": "2026-02-27T10:00:00Z",
+  "baseBranch": "main",
+  "preset": "rust",
+  "repos": [
+    {
+      "name": "dsp-api",
+      "originalPath": "/code/dasch-swiss/dsp-api",
+      "worktreePath": "/workspaces/my-feature/dsp-api",
+      "branch": "loom/bold-cedar-hawk",
+      "remoteUrl": "git@github.com:dasch-swiss/dsp-api.git"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Workspace name |
+| `branch` | `string?` | Workspace branch name. Older manifests without this field fall back to `{prefix}/{name}`. |
+| `created` | `datetime` | Creation timestamp (UTC) |
+| `baseBranch` | `string?` | Base branch for worktrees (e.g., `"main"`) |
+| `preset` | `string?` | Applied permission preset name |
+| `repos[].name` | `string` | Repository name |
+| `repos[].originalPath` | `string` | Path to the original repo clone |
+| `repos[].worktreePath` | `string` | Path to the worktree in the workspace |
+| `repos[].branch` | `string` | Branch name for this worktree |
+| `repos[].remoteUrl` | `string` | Git remote URL |
+
+### `state.json` — Global State
+
+**Location:** `{workspace_root}/.loom/state.json` (singleton)
+**Created by:** `loom new`
+**Updated by:** all workspace lifecycle commands
+**Safe to edit manually:** No — use `loom` commands instead
+
+```json
+{
+  "workspaces": [
+    {
+      "name": "my-feature",
+      "path": "/Users/you/workspaces/my-feature",
+      "created": "2026-02-27T10:00:00Z",
+      "repoCount": 2
+    }
+  ]
+}
+```
+
+A `.bak` backup is written before each update. If the primary file is corrupt, LOOM tries the backup.
+
+### Sync Manifest
+
+**Location:** `{sync.repo}/{sync.path}/{workspace-name}.json`
+**Created by:** `loom save`
+**Read by:** `loom open`
+**Safe to edit manually:** No
+
+```json
+{
+  "name": "my-feature",
+  "created": "2026-02-27T10:00:00Z",
+  "status": "active",
+  "branch": "loom/bold-cedar-hawk",
+  "repos": [
+    {
+      "name": "dsp-api",
+      "remoteUrl": "git@github.com:dasch-swiss/dsp-api.git",
+      "branch": "loom/bold-cedar-hawk"
+    }
+  ]
+}
+```
+
+The sync manifest is minimal — only what's needed to reconstruct the workspace on another machine (no local paths).
+
+**Data flow:** `loom save` writes manifest → pushes to sync repo → `loom open` on another machine reads it → clones repos → creates worktrees.
+
+### `config.toml`
+
+**Location:** `~/.config/loom/config.toml`
+**Created by:** `loom init`
+**Safe to edit:** Yes — this is the primary user-edited file
+
+See [Configuration Reference](#configuration-reference) for all options.
+
+### Generated Agent Files
+
+These are **not** internal state files — they are regenerated on every relevant operation:
+
+- `CLAUDE.md` — workspace root
+- `.claude/settings.json` — workspace root
+
+See [Agent Integration](#agent-integration) for details.
+
+---
+
+## Troubleshooting
+
+### Init Failures
+
+**No git repos found in scan roots**
+Check the [scan root convention](#scan-root-convention). Repos must be at exactly 2 levels: `{root}/{org}/{repo}`.
+
+**Invalid TOML after manual config edit**
+Validate syntax with a TOML checker. Common issues: missing quotes around strings with special characters, incorrect table nesting.
+
+**Ctrl+C during init prompts**
+Safe — no partial config is written. Re-run `loom init`.
+
+**Workspace root directory doesn't exist**
+`loom init` creates it automatically. If you later delete it, recreate it or update `config.toml`.
+
+### Common Errors
+
+**"Repo not found"**
+The repo name doesn't match any repo in the registry. Check that it exists at the correct scan root depth (`{root}/{org}/{repo}`).
+
+**"Workspace already exists"**
+A workspace with that name is already registered. Use `loom open` to restore it, or `loom down` to tear it down first.
+
+**Dirty repos blocking operations**
+`loom save`, `loom remove`, and `loom down` refuse to act on repos with uncommitted changes. Options:
+- Commit or stash your changes first
+- Use `--force` to override
+
+**"Sync repo push failed"**
+The sync repo has a conflict or network issue. Resolve manually:
+```sh
+cd ~/path/to/sync-repo
+git pull --rebase
+git push
+```
+
+**Ctrl+C during workspace creation**
+Safe — the workspace may be partially created. Use `loom down` to clean up.
+
+**Running `loom down` from inside the workspace**
+Your current directory becomes invalid after teardown. `cd` to a different directory first, then run `loom down`.
+
+**Upgrading from older LOOM**
+The old `.claude/settings.local.json` is automatically cleaned up when agent files are regenerated. Old manifests without a `branch` field are forward-compatible (fall back to `{prefix}/{name}`).
+
+**Plugin not loading**
+Check the `enabled_plugins` format: must be `"pluginName@marketplaceName"`. Verify the marketplace is registered in `extra_known_marketplaces` or globally in `~/.claude/plugins/known_marketplaces.json`. Plugins fail **silently** if the key is wrong.
+
+### Config Validation Errors
+
+**`"scan_roots path '...' does not exist"`**
+The specified scan root directory doesn't exist on disk. Create it or remove it from `scan_roots`.
+
+**`"invalid format '...' — expected ToolName(specifier)"`**
+An `allowed_tools` entry doesn't match the expected pattern. Use `ToolName(specifier)` format, e.g., `Bash(cargo test *)`.
+
+**`"Preset '...' not found. Available presets: ..."`**
+The `--preset` argument doesn't match any preset defined in `[agents.claude-code.presets.*]`. Check config.toml for available preset names.
+
+### Worktree Issues
+
+**Worktree lock files**
+Git worktrees use lock files to prevent concurrent operations. If a lock file persists after a crash, investigate what process holds it before deleting. Check with `git worktree list` in the original repo.
+
+**Partial teardown recovery**
+If `loom down` was interrupted, run it again — it's idempotent and handles partially torn-down workspaces.
