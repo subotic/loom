@@ -837,3 +837,280 @@ path = "pkm/specs"
 [agents]
 enabled = ["claude-code"]
 ```
+
+---
+
+## Security Flavors
+
+When you run `loom init`, you choose a **security flavor** that determines how AI agents are sandboxed. Each flavor solves a different problem.
+
+### Comparison
+
+| Aspect | Sandbox | Permissions | Both | Skip |
+|--------|---------|-------------|------|------|
+| **Problem it solves** | Prevent file/network access outside allowed paths | Control which tools an agent can use | Maximum isolation | No restrictions |
+| **Bash isolation** | Yes — OS-level sandbox | No | Yes | No |
+| **Tool allowlists** | No | Yes — explicit `permissions.allow` list | Yes | No |
+| **Auto-allow Bash** | Yes (when sandboxed) | No | Yes (sandboxed commands only) | No |
+| **Config complexity** | Low | Medium | High | None |
+| **Recommended for** | Most users | Fine-grained control | Production/sensitive repos | Quick experiments |
+
+### Decision Flow
+
+1. **Do you want OS-level sandboxing?**
+   - Yes → Sandbox or Both
+   - No → Permissions or Skip
+2. **Do you want explicit tool allowlists?**
+   - Yes → Permissions or Both
+   - No → Sandbox or Skip
+3. **Want both?** → Both. **Neither?** → Skip.
+
+### Persona Recommendations
+
+- **"I just want it to work safely"** → **Sandbox** (recommended default)
+- **"I need fine-grained control over which tools can run"** → **Permissions**
+- **"Maximum security for sensitive repos"** → **Both**
+- **"I'll configure security later"** → **Skip**
+
+### What Gets Generated
+
+Each flavor generates a different `.claude/settings.json`. Here's what each produces:
+
+**Sandbox:**
+
+```json
+{
+  "additionalDirectories": ["..."],
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "excludedCommands": ["docker"],
+    "filesystem": {
+      "allowWrite": ["~/.config/loom"]
+    },
+    "network": {
+      "allowedDomains": ["github.com"]
+    }
+  }
+}
+```
+
+**Permissions:**
+
+```json
+{
+  "additionalDirectories": ["..."],
+  "permissions": {
+    "allow": [
+      "Bash(cargo test *)",
+      "Bash(gh issue *)",
+      "WebFetch(domain:docs.rs)"
+    ]
+  }
+}
+```
+
+**Both:**
+
+```json
+{
+  "additionalDirectories": ["..."],
+  "permissions": {
+    "allow": ["Bash(cargo test *)", "Bash(gh issue *)"]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "excludedCommands": ["docker"],
+    "filesystem": {
+      "allowWrite": ["~/.config/loom"]
+    }
+  }
+}
+```
+
+**Skip:**
+
+```json
+{
+  "additionalDirectories": ["..."]
+}
+```
+
+### Changing Flavors After Init
+
+Edit `config.toml` to add or modify the `[agents.claude-code]` section, then regenerate:
+
+```sh
+loom refresh
+```
+
+This regenerates `.claude/settings.json` with the new settings.
+
+### Permission Pattern Syntax
+
+Tool allowlist entries use the format `ToolName(specifier)`:
+
+| Tool | Pattern | Matches |
+|------|---------|---------|
+| Bash | `Bash(cargo test *)` | `cargo test`, `cargo test --release`, `cargo test my_test` |
+| Bash | `Bash(gh issue *)` | `gh issue list`, `gh issue create`, etc. |
+| WebFetch | `WebFetch(domain:docs.rs)` | Fetch from docs.rs |
+
+**Matching rules:**
+- Specifiers use **word-boundary** matching.
+- `Bash(cargo test *)` matches `cargo test --release` but **not** `cargo testing`.
+- The wildcard `*` matches any remaining arguments.
+
+**Common mistakes:**
+- Missing parentheses: `Bash cargo test` → must be `Bash(cargo test *)`
+- Wrong capitalization: `bash(cargo test *)` → must be `Bash(...)` (capital B)
+- Missing wildcard: `Bash(cargo test)` → matches only exact `cargo test` with no arguments
+
+---
+
+## Permission Presets
+
+Presets let you define named bundles of permissions that can be applied per-workspace.
+
+### Defining a Preset
+
+```toml
+[agents.claude-code.presets.rust]
+allowed_tools = [
+    "Bash(cargo test *)",
+    "Bash(cargo fmt *)",
+    "Bash(cargo clippy *)",
+]
+
+[agents.claude-code.presets.rust.sandbox.filesystem]
+allow_write = ["~/.cargo"]
+
+[agents.claude-code.presets.rust.sandbox.network]
+allowed_domains = ["docs.rs", "crates.io"]
+```
+
+### Selecting a Preset
+
+```sh
+loom new my-feature --preset rust     # At creation time
+loom refresh --preset rust            # Change preset on existing workspace
+loom refresh --preset ""              # Remove the current preset
+```
+
+### Merge Rules
+
+When a preset is applied, its settings are **merged** with the global config:
+
+| Field Type | Merge Behavior | Example Fields |
+|------------|---------------|----------------|
+| Arrays | Global **∪** Preset (union, sorted, deduplicated) | `allowed_tools`, `filesystem.allow_write`, `network.allowed_domains` |
+| Booleans | Global only (presets cannot override) | `sandbox.enabled`, `sandbox.auto_allow`, `sandbox.excluded_commands` |
+
+**Why:** Presets can only **add** permissions, never remove global restrictions. Boolean flags (enabled, auto_allow) are enforced by the global config only — the preset schema excludes them.
+
+### Worked Example
+
+**Global config:**
+
+```toml
+[agents.claude-code]
+allowed_tools = ["Bash(gh issue *)", "Bash(gh run *)"]
+
+[agents.claude-code.sandbox]
+enabled = true
+auto_allow = true
+
+[agents.claude-code.sandbox.filesystem]
+allow_write = ["~/.config/loom"]
+
+[agents.claude-code.sandbox.network]
+allowed_domains = ["github.com"]
+```
+
+**Rust preset:**
+
+```toml
+[agents.claude-code.presets.rust]
+allowed_tools = ["Bash(cargo test *)", "Bash(cargo clippy *)"]
+
+[agents.claude-code.presets.rust.sandbox.filesystem]
+allow_write = ["~/.cargo"]
+
+[agents.claude-code.presets.rust.sandbox.network]
+allowed_domains = ["docs.rs", "crates.io"]
+```
+
+**Resulting `settings.json` with `--preset rust`:**
+
+```json
+{
+  "additionalDirectories": ["..."],
+  "permissions": {
+    "allow": [
+      "Bash(cargo clippy *)",
+      "Bash(cargo test *)",
+      "Bash(gh issue *)",
+      "Bash(gh run *)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "filesystem": {
+      "allowWrite": ["~/.cargo", "~/.config/loom"]
+    },
+    "network": {
+      "allowedDomains": ["crates.io", "docs.rs", "github.com"]
+    }
+  }
+}
+```
+
+All arrays are merged, sorted, and deduplicated. Booleans come from global config only.
+
+---
+
+## Agent Integration
+
+When `[agents]` is configured, LOOM generates two files per workspace:
+
+### Generated `CLAUDE.md`
+
+The workspace root gets a `CLAUDE.md` containing:
+
+- **Workspace name** and link to LOOM
+- **Repositories table** — directory, branch, source (+ workflow column if `[repos]` configured)
+- **Working instructions** — how to use `loom exec`, `loom save`, `loom status`
+- **Workflows section** — PR vs push instructions per repo (only if `[repos]` entries exist)
+- **Specs section** — PRD/plan path conventions (only if `[specs]` configured)
+
+### Generated `.claude/settings.json`
+
+| config.toml Field | settings.json Field |
+|---|---|
+| (always) | `additionalDirectories` (paths to repo worktrees) |
+| `model` | `model` |
+| `allowed_tools` + preset | `permissions.allow` |
+| `sandbox.*` | `sandbox.*` (camelCase mapped) |
+| `enabled_plugins` | `enabledPlugins` (map of name → `true`) |
+| `extra_known_marketplaces` | `extraKnownMarketplaces` |
+
+### Plugin Configuration
+
+Plugins are specified by name and marketplace:
+
+```toml
+enabled_plugins = ["my-plugin@my-marketplace"]
+extra_known_marketplaces = [
+    { name = "my-marketplace", repo = "owner/plugins-repo" },
+]
+```
+
+> **Warning:** If any `enabled_plugins` key is wrong or the marketplace isn't in `extra_known_marketplaces` (or globally registered), the plugin **silently won't load**. Always verify plugin activation after config changes.
+
+### Regeneration Triggers
+
+Agent files are regenerated automatically by: `loom new`, `loom add`, `loom remove`, `loom open`, `loom refresh`.
+
+> **Note:** After changing workspace composition (add/remove repos), restart Claude Code to pick up the updated `additionalDirectories`.
