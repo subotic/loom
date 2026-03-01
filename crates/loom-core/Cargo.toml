@@ -19,6 +19,7 @@ shellexpand.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 toml.workspace = true
+toml_edit.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

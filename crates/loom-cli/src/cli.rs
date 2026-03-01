@@ -156,12 +156,23 @@ impl Cli {
     }
 
     fn run_init(&self) -> anyhow::Result<()> {
-        use dialoguer::{Confirm, Input, MultiSelect};
-        use loom_core::config::init;
+        use dialoguer::{Confirm, Input, MultiSelect, Select};
+        use loom_core::config::init::{self, SecurityFlavor};
 
         // Check if config already exists
         let config_path = loom_core::config::Config::path()?;
-        if config_path.exists() {
+        let is_reinit = config_path.exists();
+        let existing_has_agent_config = if is_reinit {
+            // Check if existing config has non-empty agent config
+            let existing_content = std::fs::read_to_string(&config_path)?;
+            let existing: loom_core::config::Config = toml::from_str(&existing_content)
+                .unwrap_or_else(|_| loom_core::config::Config::default_config());
+            !existing.agents.claude_code.is_empty()
+        } else {
+            false
+        };
+
+        if is_reinit {
             let update = Confirm::new()
                 .with_prompt(format!(
                     "Config already exists at {}. Update it?",
@@ -225,16 +236,58 @@ impl Cli {
             .default("loom".to_string())
             .interact_text()?;
 
-        // Create config
+        // Security flavor prompt (skip on re-init with existing agent config)
+        let flavor = if existing_has_agent_config {
+            eprintln!(
+                "  Preserving existing Claude Code agent settings from config."
+            );
+            None
+        } else {
+            let items = [
+                "Sandbox (recommended) — OS-level isolation with auto-allow",
+                "Permissions — Explicit tool allowlists for fine-grained control",
+                "Both — Sandbox for Bash + permissions for non-Bash tools",
+                "Skip — Don't configure now (can be added later in config.toml)",
+            ];
+            let selection = Select::new()
+                .with_prompt("How should Claude Code handle permissions in LOOM workspaces?")
+                .items(&items)
+                .default(0)
+                .interact()?;
+            Some(match selection {
+                0 => SecurityFlavor::Sandbox,
+                1 => SecurityFlavor::Permissions,
+                2 => SecurityFlavor::Both,
+                _ => SecurityFlavor::Skip,
+            })
+        };
+
+        // Build config
+        let claude_code = match flavor {
+            Some(f) => init::build_claude_code_config(f),
+            None => loom_core::config::ClaudeCodeConfig::default(), // placeholder for re-init
+        };
+
         let config = init::create_config(
             scan_roots,
             workspace_root,
             Some(terminal),
             branch_prefix,
             vec!["claude-code".to_string()],
+            claude_code,
         )?;
 
-        // Save and create directories
+        // Save config
+        if is_reinit && existing_has_agent_config {
+            // Preserve agent section and comments using toml_edit
+            init::update_non_agent_config(&config)?;
+        } else {
+            // Fresh init or re-init without agent config: full save with preset comments
+            let f = flavor.unwrap_or(SecurityFlavor::Skip);
+            init::save_init_config(&config, f)?;
+        }
+
+        // Create required directories
         init::finalize_init(&config)?;
 
         println!("\nloom initialized successfully!");
