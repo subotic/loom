@@ -19,7 +19,7 @@ LOOM creates a centralized workspace directory containing correlated git worktre
 ├── .loom.json          # workspace manifest
 ├── CLAUDE.md           # generated — agent context
 ├── .claude/
-│   └── settings.local.json
+│   └── settings.json
 ├── sipi/               # ← git worktree
 ├── dsp-api/            # ← git worktree
 └── dsp-das/            # ← git worktree
@@ -93,7 +93,7 @@ enabled = ["claude-code"]          # agent integrations to generate
 Workspaces are agent-ready out of the box. LOOM generates:
 
 - **`CLAUDE.md`** — workspace context with repo table, branches, and sources
-- **`.claude/settings.local.json`** — `additionalDirectories` so Claude Code can access all repos
+- **`.claude/settings.json`** — `additionalDirectories` so Claude Code can access all repos
 
 Drop into any workspace and start an AI coding session immediately.
 

@@ -159,7 +159,7 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
     // Final manifest write
     manifest::write_manifest(&ws_path.join(super::MANIFEST_FILENAME), &ws_manifest)?;
 
-    // Generate agent files (CLAUDE.md, .claude/settings.local.json)
+    // Generate agent files (CLAUDE.md, .claude/settings.json)
     crate::agent::generate_agent_files(config, &ws_path, &ws_manifest)?;
 
     Ok(NewWorkspaceResult {
