@@ -188,10 +188,7 @@ fn generate_settings(
             if !deny_read.is_empty() {
                 fs_obj.insert("denyRead".to_string(), serde_json::json!(deny_read));
             }
-            sandbox_obj.insert(
-                "filesystem".to_string(),
-                serde_json::Value::Object(fs_obj),
-            );
+            sandbox_obj.insert("filesystem".to_string(), serde_json::Value::Object(fs_obj));
         }
 
         // Merge network arrays: global ∪ preset
@@ -225,8 +222,8 @@ mod tests {
         PresetSandboxConfig, RegistryConfig, SandboxConfig, SandboxFilesystemConfig,
         SandboxNetworkConfig, WorkspaceConfig,
     };
-    use std::collections::BTreeMap;
     use crate::manifest::RepoManifestEntry;
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     fn test_manifest() -> WorkspaceManifest {
