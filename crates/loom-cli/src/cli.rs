@@ -42,6 +42,9 @@ pub enum Command {
         /// Repos to include (comma-separated, non-interactive mode)
         #[arg(long, value_delimiter = ',')]
         repos: Option<Vec<String>>,
+        /// Named repo groups from config.toml (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        groups: Option<Vec<String>>,
         /// Permission preset name (from config.toml)
         #[arg(
             long,
@@ -603,10 +606,12 @@ impl Cli {
         name: Option<String>,
         base: Option<String>,
         repos_filter: Option<Vec<String>>,
+        group_filter: Option<Vec<String>>,
         preset: Option<String>,
     ) -> anyhow::Result<()> {
-        use dialoguer::{MultiSelect, Select};
+        use dialoguer::MultiSelect;
         use loom_core::config::ensure_config_loaded;
+        use loom_core::groups::GroupEntry;
         use loom_core::registry;
         use loom_core::workspace::new::{NewWorkspaceOpts, create_workspace};
 
@@ -634,17 +639,49 @@ impl Cli {
             );
         }
 
-        // Select repos: --repos flag (non-interactive) or dialoguer MultiSelect (interactive)
-        let selected_repos = match repos_filter {
+        // Resolve --groups to repos if provided
+        let group_repos = match &group_filter {
             Some(names) => {
-                // Non-interactive: match by name
-                let mut matched: Vec<loom_core::registry::RepoEntry> = Vec::new();
+                let (matched, warnings) =
+                    loom_core::groups::resolve_groups(names, &config.groups, &all_repos)?;
+                for w in &warnings {
+                    eprintln!("Warning: {w}");
+                }
+                Some(matched)
+            }
+            None => None,
+        };
+
+        // Determine if non-interactive (--repos and/or --groups provided)
+        let is_non_interactive = repos_filter.is_some() || group_repos.is_some();
+
+        let selected_repos = if is_non_interactive {
+            // Non-interactive: resolve --repos and union with --groups results
+            let mut matched: Vec<loom_core::registry::RepoEntry> = Vec::new();
+            let mut seen_paths: std::collections::HashSet<std::path::PathBuf> =
+                std::collections::HashSet::new();
+
+            // Add group repos first
+            if let Some(group_matched) = group_repos {
+                for r in group_matched {
+                    if seen_paths.insert(r.path.clone()) {
+                        matched.push(r);
+                    }
+                }
+            }
+
+            // Add --repos matches
+            if let Some(names) = repos_filter {
                 for req_name in &names {
                     let found = all_repos.iter().find(|r| {
                         r.name == *req_name || format!("{}/{}", r.org, r.name) == *req_name
                     });
                     match found {
-                        Some(r) => matched.push(r.clone()),
+                        Some(r) => {
+                            if seen_paths.insert(r.path.clone()) {
+                                matched.push(r.clone());
+                            }
+                        }
                         None => anyhow::bail!(
                             "Repository '{}' not found. Available: {}",
                             req_name,
@@ -656,49 +693,122 @@ impl Cli {
                         ),
                     }
                 }
-                matched
             }
-            None => {
-                // Interactive: two-step selection (orgs → repos)
 
-                // Extract unique org names (already sorted from discover_repos)
-                let mut orgs: Vec<String> = all_repos.iter().map(|r| r.org.clone()).collect();
-                orgs.dedup();
+            if matched.is_empty() {
+                anyhow::bail!("No repositories matched. Check your --groups and --repos values.");
+            }
 
-                // Step 1: Select org (skip if only one)
-                let selected_org: String = if orgs.len() == 1 {
-                    orgs.into_iter().next().unwrap()
-                } else {
-                    let idx = Select::new()
-                        .with_prompt("Select organization")
-                        .items(&orgs)
-                        .default(0)
-                        .interact_opt()?;
-                    match idx {
-                        Some(i) => orgs[i].clone(),
-                        None => anyhow::bail!("Organization selection cancelled."),
-                    }
-                };
+            // Sort by (org, name) for deterministic ordering
+            matched.sort_by(|a, b| (&a.org, &a.name).cmp(&(&b.org, &b.name)));
+            matched
+        } else {
+            // Interactive: two-step selection (groups → repos)
 
-                // Step 2: Filter repos to selected org, then pick repos
-                let filtered: Vec<&loom_core::registry::RepoEntry> =
-                    all_repos.iter().filter(|r| r.org == selected_org).collect();
-                let labels: Vec<String> = filtered
+            // Build combined group list: config groups + org groups
+            let mut group_entries: Vec<GroupEntry> = Vec::new();
+
+            // Add config groups
+            for (name, repo_names) in &config.groups {
+                group_entries.push(GroupEntry::ConfigGroup {
+                    name: name.clone(),
+                    repo_names: repo_names.clone(),
+                });
+            }
+
+            // Add org groups
+            let mut orgs: Vec<String> = all_repos.iter().map(|r| r.org.clone()).collect();
+            orgs.dedup();
+            for org in &orgs {
+                group_entries.push(GroupEntry::OrgGroup { name: org.clone() });
+            }
+
+            // Step 1: Select groups (skip only when no config groups AND ≤ 1 org)
+            let has_config_groups = group_entries
+                .iter()
+                .any(|g| matches!(g, GroupEntry::ConfigGroup { .. }));
+            let org_count = group_entries
+                .iter()
+                .filter(|g| matches!(g, GroupEntry::OrgGroup { .. }))
+                .count();
+            let selected_group_entries = if !has_config_groups && org_count <= 1 {
+                group_entries
+            } else {
+                let labels: Vec<String> = group_entries
                     .iter()
-                    .map(|r| format!("{}/{}", r.org, r.name))
+                    .map(|g| match g {
+                        GroupEntry::ConfigGroup { name, repo_names } => {
+                            format!("[G] {} ({} repos)", name, repo_names.len())
+                        }
+                        GroupEntry::OrgGroup { name } => {
+                            let count = all_repos.iter().filter(|r| r.org == *name).count();
+                            format!("[O] {} ({} repos)", name, count)
+                        }
+                    })
                     .collect();
                 let selections = MultiSelect::new()
-                    .with_prompt("Select repositories for this workspace")
+                    .with_prompt("Select groups")
                     .items(&labels)
                     .interact()?;
                 if selections.is_empty() {
-                    anyhow::bail!("No repositories selected.");
+                    anyhow::bail!("No groups selected.");
                 }
                 selections
                     .into_iter()
-                    .map(|i| filtered[i].clone())
+                    .map(|i| group_entries[i].clone())
                     .collect()
+            };
+
+            // Step 2: Filter repos based on selected groups, then pick individual repos
+            let mut pre_selected: std::collections::HashSet<usize> =
+                std::collections::HashSet::new();
+            let mut filtered_indices: Vec<usize> = Vec::new();
+            let mut seen_idx: std::collections::HashSet<usize> = std::collections::HashSet::new();
+
+            for entry in &selected_group_entries {
+                match entry {
+                    GroupEntry::ConfigGroup { repo_names, .. } => {
+                        for (i, r) in all_repos.iter().enumerate() {
+                            let matches = repo_names
+                                .iter()
+                                .any(|rn| r.name == *rn || format!("{}/{}", r.org, r.name) == *rn);
+                            if matches && seen_idx.insert(i) {
+                                filtered_indices.push(i);
+                                pre_selected.insert(filtered_indices.len() - 1);
+                            }
+                        }
+                    }
+                    GroupEntry::OrgGroup { name } => {
+                        for (i, r) in all_repos.iter().enumerate() {
+                            if r.org == *name && seen_idx.insert(i) {
+                                filtered_indices.push(i);
+                            }
+                        }
+                    }
+                }
             }
+
+            let filtered: Vec<&loom_core::registry::RepoEntry> =
+                filtered_indices.iter().map(|&i| &all_repos[i]).collect();
+            let labels: Vec<String> = filtered
+                .iter()
+                .map(|r| format!("{}/{}", r.org, r.name))
+                .collect();
+            let defaults: Vec<bool> = (0..labels.len())
+                .map(|i| pre_selected.contains(&i))
+                .collect();
+            let selections = MultiSelect::new()
+                .with_prompt("Select repositories for this workspace")
+                .items(&labels)
+                .defaults(&defaults)
+                .interact()?;
+            if selections.is_empty() {
+                anyhow::bail!("No repositories selected.");
+            }
+            selections
+                .into_iter()
+                .map(|i| filtered[i].clone())
+                .collect()
         };
 
         let result = create_workspace(
@@ -867,9 +977,10 @@ impl Cli {
                 name,
                 base,
                 repos,
+                groups,
                 preset,
             } => {
-                Self::run_new(name, base, repos, preset)?;
+                Self::run_new(name, base, repos, groups, preset)?;
             }
             Command::Add { repo, workspace } => {
                 Self::run_add(repo, workspace)?;
