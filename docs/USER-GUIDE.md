@@ -537,3 +537,303 @@ loom completions <SHELL>
 # Add to your ~/.zshrc:
 eval "$(loom completions zsh)"
 ```
+
+---
+
+## Configuration Reference
+
+Configuration lives at `~/.config/loom/config.toml`. Created by `loom init`, edited by hand.
+
+### Section Overview
+
+| Section | Required | Default When Absent |
+|---------|----------|-------------------|
+| `[registry]` | Yes | — |
+| `[workspace]` | Yes | — |
+| `[sync]` | No | Sync disabled (`loom open` unavailable) |
+| `[terminal]` | No | Detected from `TERM_PROGRAM` env var |
+| `[defaults]` | No | `branch_prefix = "loom"` |
+| `[repos.<name>]` | No | `workflow = "pr"` for all repos |
+| `[specs]` | No | No specs section in generated CLAUDE.md |
+| `[agents]` | No | No agent files generated |
+| `[agents.claude-code]` | No | Minimal settings.json (directories only) |
+| `[agents.claude-code.sandbox]` | No | No sandbox isolation |
+| `[agents.claude-code.presets.<name>]` | No | No presets available |
+
+### Minimal Configuration
+
+```toml
+[registry]
+scan_roots = ["~/_github.com"]
+
+[workspace]
+root = "~/workspaces"
+```
+
+### Full Annotated Example
+
+```toml
+# ── Required ──────────────────────────────────────────────
+
+[registry]
+scan_roots = ["~/_github.com", "~/code"]  # Dirs scanned for repos (2-level depth)
+
+[workspace]
+root = "~/workspaces"                      # Root directory for all workspaces
+
+# ── Optional ──────────────────────────────────────────────
+
+[sync]
+repo = "~/path/to/sync-repo"              # Git repo for cross-machine sync manifests
+path = "loom/"                             # Subdirectory within sync repo
+
+[terminal]
+command = "ghostty"                        # Terminal for `loom shell`
+
+[defaults]
+branch_prefix = "loom"                     # Prefix for worktree branches (loom/<random-name>)
+
+# Per-repo workflow overrides
+[repos.my-library]
+workflow = "push"                          # "pr" (default) or "push" — affects CLAUDE.md only
+
+[specs]
+path = "specs/"                            # Relative path for specs section in generated CLAUDE.md
+
+# ── Agent Integration ─────────────────────────────────────
+
+[agents]
+enabled = ["claude-code"]                  # Which agent integrations to generate
+
+[agents.claude-code]
+model = "opus"                             # Pin Claude model (optional)
+allowed_tools = [                          # Global tool allowlist
+    "Bash(gh issue *)",
+    "Bash(gh run *)",
+    "WebFetch(domain:docs.rs)",
+]
+enabled_plugins = ["my-plugin@my-marketplace"]
+extra_known_marketplaces = [
+    { name = "my-marketplace", repo = "owner/plugins-repo" },
+]
+
+# OS-level sandbox isolation
+[agents.claude-code.sandbox]
+enabled = true
+auto_allow = true                          # Auto-allow Bash if sandboxed
+excluded_commands = ["docker"]             # Commands that bypass sandbox
+allow_unsandboxed_commands = false         # Block unsandboxed commands entirely
+
+[agents.claude-code.sandbox.filesystem]
+allow_write = ["~/.cargo", "~/.config/loom"]
+deny_write = []
+deny_read = []
+
+[agents.claude-code.sandbox.network]
+allowed_domains = ["github.com", "docs.rs", "crates.io"]
+
+# Named presets — selected per workspace with --preset
+[agents.claude-code.presets.rust]
+allowed_tools = [
+    "Bash(cargo test *)",
+    "Bash(cargo fmt *)",
+    "Bash(cargo clippy *)",
+]
+
+[agents.claude-code.presets.rust.sandbox.filesystem]
+allow_write = ["~/.cargo"]
+
+[agents.claude-code.presets.rust.sandbox.network]
+allowed_domains = ["docs.rs", "crates.io"]
+```
+
+### Per-Section Reference
+
+#### `[registry]` (Required)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `scan_roots` | `string[]` | — | Directories to scan for git repos. Tilde-expanded. Repos must be at exactly 2 levels deep: `{root}/{org}/{repo}`. |
+
+#### `[workspace]` (Required)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `root` | `string` | — | Root directory where workspaces are created. Tilde-expanded. A `.loom/` subdirectory stores global state. |
+
+#### `[sync]` (Optional)
+
+Omit this entire section to disable cross-machine sync. `loom save` still pushes branches without it.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `repo` | `string` | — | Path to a local git repo used for storing sync manifests. Tilde-expanded. |
+| `path` | `string` | — | Subdirectory within the sync repo for manifest files. |
+
+#### `[terminal]` (Optional)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `command` | `string` | Auto-detected | Terminal command for `loom shell`. Falls back to `TERM_PROGRAM` env var. |
+
+#### `[defaults]` (Optional)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `branch_prefix` | `string` | `"loom"` | Prefix for worktree branch names. Branches are created as `{prefix}/{random-name}`. |
+
+#### `[repos.<name>]` (Optional, per-repo)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `workflow` | `string` | `"pr"` | `"pr"` or `"push"`. Controls the workflow instructions in the generated CLAUDE.md. `"pr"`: create branch, open PR. `"push"`: push directly to main. Does **not** affect `loom save` behavior. |
+
+#### `[specs]` (Optional)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `path` | `string` | — | Relative path within the workspace for PRD/plan specs. Added to the generated CLAUDE.md. |
+
+#### `[agents]` (Optional)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | `string[]` | `[]` | Agent integrations to generate. Currently only `"claude-code"` is supported. |
+
+#### `[agents.claude-code]` (Optional)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `model` | `string` | — | Pin a Claude model (e.g., `"opus"`, `"sonnet"`). |
+| `allowed_tools` | `string[]` | `[]` | Global tool allowlist. Format: `ToolName(specifier)`. See [Permission Pattern Syntax](#permission-pattern-syntax). |
+| `enabled_plugins` | `string[]` | `[]` | Plugins to enable. Format: `"pluginName@marketplaceName"`. |
+| `extra_known_marketplaces` | `table[]` | `[]` | Additional plugin marketplace sources. Each entry: `{ name = "...", repo = "owner/repo" }`. |
+
+> **Warning:** If any `enabled_plugins` key is wrong or the marketplace isn't registered, the plugin silently won't load. Verify plugin activation after config changes.
+
+#### `[agents.claude-code.sandbox]` (Optional)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | `bool` | `false` | Enable OS-level sandbox isolation. |
+| `auto_allow` | `bool` | `false` | Auto-allow Bash commands when sandboxed. Maps to `autoAllowBashIfSandboxed` in settings.json. |
+| `excluded_commands` | `string[]` | `[]` | Commands that bypass the sandbox. |
+| `allow_unsandboxed_commands` | `bool` | — | Whether to allow unsandboxed commands at all. |
+
+#### `[agents.claude-code.sandbox.filesystem]` (Optional)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `allow_write` | `string[]` | `[]` | Paths the sandbox allows writing to. |
+| `deny_write` | `string[]` | `[]` | Paths explicitly denied for writing. |
+| `deny_read` | `string[]` | `[]` | Paths explicitly denied for reading. |
+
+#### `[agents.claude-code.sandbox.network]` (Optional)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `allowed_domains` | `string[]` | `[]` | Network domains the sandbox allows access to. |
+
+#### `[agents.claude-code.presets.<name>]` (Optional)
+
+Named permission presets. See [Permission Presets](#permission-presets) for details.
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `allowed_tools` | `string[]` | Additional tool allowlist entries (merged with global). |
+| `sandbox.filesystem.allow_write` | `string[]` | Additional write-allowed paths (merged with global). |
+| `sandbox.filesystem.deny_write` | `string[]` | Additional write-denied paths (merged with global). |
+| `sandbox.filesystem.deny_read` | `string[]` | Additional read-denied paths (merged with global). |
+| `sandbox.network.allowed_domains` | `string[]` | Additional allowed domains (merged with global). |
+
+### Example Configurations
+
+#### Solo Developer (minimal, no sync, no agents)
+
+```toml
+[registry]
+scan_roots = ["~/code"]
+
+[workspace]
+root = "~/workspaces"
+```
+
+#### Multi-Machine Sync
+
+```toml
+[registry]
+scan_roots = ["~/_github.com"]
+
+[workspace]
+root = "~/workspaces"
+
+[sync]
+repo = "~/dotfiles"
+path = "loom/"
+```
+
+#### AI Agent Setup (sandbox + presets)
+
+```toml
+[registry]
+scan_roots = ["~/_github.com"]
+
+[workspace]
+root = "~/workspaces"
+
+[agents]
+enabled = ["claude-code"]
+
+[agents.claude-code]
+model = "opus"
+allowed_tools = [
+    "Bash(gh issue *)",
+    "Bash(gh run *)",
+]
+
+[agents.claude-code.sandbox]
+enabled = true
+auto_allow = true
+excluded_commands = ["docker"]
+
+[agents.claude-code.sandbox.filesystem]
+allow_write = ["~/.config/loom"]
+
+[agents.claude-code.sandbox.network]
+allowed_domains = ["github.com", "api.github.com"]
+
+[agents.claude-code.presets.rust]
+allowed_tools = [
+    "Bash(cargo test *)",
+    "Bash(cargo clippy *)",
+    "Bash(cargo fmt *)",
+]
+
+[agents.claude-code.presets.rust.sandbox.filesystem]
+allow_write = ["~/.cargo"]
+
+[agents.claude-code.presets.rust.sandbox.network]
+allowed_domains = ["docs.rs", "crates.io"]
+```
+
+#### Mixed Workflow (PR + push repos)
+
+```toml
+[registry]
+scan_roots = ["~/_github.com"]
+
+[workspace]
+root = "~/workspaces"
+
+[repos.dsp-api]
+workflow = "pr"
+
+[repos.pkm]
+workflow = "push"
+
+[specs]
+path = "pkm/specs"
+
+[agents]
+enabled = ["claude-code"]
+```
