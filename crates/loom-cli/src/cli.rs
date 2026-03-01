@@ -327,8 +327,8 @@ impl Cli {
         }
 
         println!(
-            "{:<20} {:<6} {:<12} {:<20} CREATED",
-            "NAME", "REPOS", "STATUS", "PRESET"
+            "{:<20} {:<6} {:<12} {:<30} CREATED",
+            "NAME", "REPOS", "STATUS", "BRANCH"
         );
         for ws in &summaries {
             let status_str = match &ws.status {
@@ -336,11 +336,10 @@ impl Cli {
                 WorkspaceHealth::Dirty(n) => format!("{n} dirty"),
                 WorkspaceHealth::Broken(msg) => format!("broken: {msg}"),
             };
-            let preset_str = ws.preset.as_deref().unwrap_or("-");
             let date = ws.created.format("%Y-%m-%d");
             println!(
-                "{:<20} {:<6} {:<12} {:<20} {}",
-                ws.name, ws.repo_count, status_str, preset_str, date
+                "{:<20} {:<6} {:<12} {:<30} {}",
+                ws.name, ws.repo_count, status_str, ws.branch, date
             );
         }
 
