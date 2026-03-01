@@ -866,6 +866,7 @@ dependencies = [
  "chrono",
  "dialoguer",
  "dirs",
+ "fastrand",
  "insta",
  "ratatui",
  "serde",

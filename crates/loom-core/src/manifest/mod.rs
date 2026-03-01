@@ -165,6 +165,7 @@ mod tests {
 
         let manifest = WorkspaceManifest {
             name: "test".to_string(),
+            branch: None,
             created: chrono::Utc::now(),
             base_branch: Some("main".to_string()),
             preset: None,

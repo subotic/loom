@@ -319,6 +319,7 @@ mod tests {
     fn test_manifest() -> WorkspaceManifest {
         WorkspaceManifest {
             name: "my-feature".to_string(),
+            branch: None,
             created: chrono::DateTime::parse_from_rfc3339("2026-02-27T10:00:00Z")
                 .unwrap()
                 .with_timezone(&chrono::Utc),
@@ -404,6 +405,7 @@ mod tests {
     fn test_claude_md_empty_repos() {
         let manifest = WorkspaceManifest {
             name: "empty-ws".to_string(),
+            branch: None,
             created: chrono::Utc::now(),
             base_branch: None,
             preset: None,
@@ -420,6 +422,7 @@ mod tests {
     fn test_settings_empty_repos() {
         let manifest = WorkspaceManifest {
             name: "empty-ws".to_string(),
+            branch: None,
             created: chrono::Utc::now(),
             base_branch: None,
             preset: None,
@@ -459,6 +462,7 @@ mod tests {
     fn test_claude_md_no_remote_url() {
         let manifest = WorkspaceManifest {
             name: "local-ws".to_string(),
+            branch: None,
             created: chrono::Utc::now(),
             base_branch: None,
             preset: None,
@@ -549,6 +553,7 @@ mod tests {
     fn test_claude_md_empty_repos_with_workflow_config() {
         let manifest = WorkspaceManifest {
             name: "empty-ws".to_string(),
+            branch: None,
             created: chrono::DateTime::parse_from_rfc3339("2026-02-27T10:00:00Z")
                 .unwrap()
                 .with_timezone(&chrono::Utc),

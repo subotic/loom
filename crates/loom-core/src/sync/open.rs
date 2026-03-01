@@ -148,6 +148,7 @@ pub fn open_workspace(config: &Config, name: &str) -> Result<OpenResult> {
     let existing_preset = existing_manifest.as_ref().and_then(|m| m.preset.clone());
     let ws_manifest = WorkspaceManifest {
         name: name.to_string(),
+        branch: sync_manifest.repos.first().map(|r| r.branch.clone()),
         created: sync_manifest.created,
         base_branch: None,
         preset: existing_preset,

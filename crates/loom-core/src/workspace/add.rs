@@ -165,6 +165,7 @@ mod tests {
 
         let mut manifest = WorkspaceManifest {
             name: "test-ws".to_string(),
+            branch: None,
             created: chrono::Utc::now(),
             base_branch: None,
             preset: None,
@@ -200,6 +201,7 @@ mod tests {
 
         let mut manifest = WorkspaceManifest {
             name: "test-ws".to_string(),
+            branch: None,
             created: chrono::Utc::now(),
             base_branch: None,
             preset: None,

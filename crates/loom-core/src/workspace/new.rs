@@ -106,6 +106,7 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
     // Initialize workspace manifest
     let mut ws_manifest = WorkspaceManifest {
         name: opts.name.clone(),
+        branch: None, // Set after branch generation in the repo loop
         created: now,
         base_branch: opts.base_branch.clone(),
         preset: opts.preset.clone(),
