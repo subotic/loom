@@ -4,6 +4,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Cell, Clear, Paragraph, Row, Table, TableState, Wrap};
 
+use crate::groups::GroupEntry;
+
 use super::app::{App, Screen, StatusLevel, WizardStep};
 
 /// Main view dispatch (TEA view function).
@@ -184,7 +186,7 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
         name,
         available_repos,
         groups,
-        selected_group,
+        selected_groups,
         selected,
         focused,
     } = &app.screen
@@ -227,15 +229,30 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
             ])
             .areas(inner);
 
-            let prompt = Paragraph::new(format!("Select organization for '{}':", name));
+            let prompt = Paragraph::new(format!(
+                "Select groups for '{}' (Space to toggle, Enter to confirm):",
+                name
+            ));
             frame.render_widget(prompt, prompt_area);
 
             let rows: Vec<Row> = groups
                 .iter()
                 .enumerate()
                 .map(|(i, group)| {
-                    let repo_count = available_repos.iter().filter(|r| r.org == *group).count();
-                    let marker = if i == *focused { ">>" } else { "  " };
+                    let (prefix, label, repo_count) = match group {
+                        GroupEntry::ConfigGroup { name, repo_names } => {
+                            ("[G]", name.clone(), repo_names.len())
+                        }
+                        GroupEntry::OrgGroup { name } => {
+                            let count = available_repos.iter().filter(|r| r.org == *name).count();
+                            ("[O]", name.clone(), count)
+                        }
+                    };
+                    let marker = if selected_groups.contains(&i) {
+                        "[x]"
+                    } else {
+                        "[ ]"
+                    };
                     let style = if i == *focused {
                         Style::default().add_modifier(Modifier::REVERSED)
                     } else {
@@ -243,7 +260,7 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
                     };
                     Row::new(vec![
                         Cell::new(marker),
-                        Cell::new(group.clone()),
+                        Cell::new(format!("{prefix} {label}")),
                         Cell::new(format!("({repo_count} repos)")),
                     ])
                     .style(style)
@@ -251,14 +268,14 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
                 .collect();
 
             let widths = [
-                Constraint::Length(3),
+                Constraint::Length(4),
                 Constraint::Min(20),
                 Constraint::Length(12),
             ];
             let table = Table::new(rows, widths);
             frame.render_widget(table, list_area);
 
-            let hint = Paragraph::new("Enter: select  Esc: back")
+            let hint = Paragraph::new("Space: toggle  Enter: confirm  Esc: back")
                 .style(Style::default().fg(Color::DarkGray));
             frame.render_widget(hint, hint_area);
         }
@@ -276,11 +293,9 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
             ));
             frame.render_widget(prompt, prompt_area);
 
-            // Show only repos from selected org
-            let Some(org) = groups.get(*selected_group) else {
-                return;
-            };
-            let visible_indices = App::filtered_repo_indices(available_repos, org);
+            // Show repos from selected groups
+            let visible_indices =
+                App::filtered_repo_indices(available_repos, selected_groups, groups);
             let rows: Vec<Row> = visible_indices
                 .iter()
                 .enumerate()
@@ -380,7 +395,7 @@ fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
             Screen::WorkspaceDetail { .. } => "Esc:back  d:teardown",
             Screen::NewWizard { step, .. } => match step {
                 WizardStep::EnterName => "Enter:next  Esc:cancel",
-                WizardStep::SelectGroups => "Enter:select  Esc:back",
+                WizardStep::SelectGroups => "Space: toggle  Enter:confirm  Esc:back",
                 WizardStep::SelectRepos => "Space:toggle  Enter:confirm  Esc:back",
                 WizardStep::Confirm => "Enter:create  Esc:back",
             },
