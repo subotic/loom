@@ -115,6 +115,7 @@ mod tests {
 
         let manifest = WorkspaceManifest {
             name: "my-ws".to_string(),
+            branch: None,
             created: chrono::Utc::now(),
             base_branch: None,
             preset: None,
@@ -160,6 +161,7 @@ mod tests {
 
         let manifest = WorkspaceManifest {
             name: "my-ws".to_string(),
+            branch: None,
             created: chrono::Utc::now(),
             base_branch: None,
             preset: None,
@@ -198,6 +200,7 @@ mod tests {
 
         let manifest = WorkspaceManifest {
             name: "my-ws".to_string(),
+            branch: None,
             created: chrono::Utc::now(),
             base_branch: None,
             preset: None,
@@ -257,6 +260,7 @@ mod tests {
 
         let manifest = WorkspaceManifest {
             name: "my-ws".to_string(),
+            branch: None,
             created: chrono::Utc::now(),
             base_branch: None,
             preset: None,

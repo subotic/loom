@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceManifest {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
     pub created: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base_branch: Option<String>,
@@ -15,6 +17,16 @@ pub struct WorkspaceManifest {
     pub preset: Option<String>,
     #[serde(default)]
     pub repos: Vec<RepoManifestEntry>,
+}
+
+impl WorkspaceManifest {
+    /// Returns the workspace branch name, falling back to `{prefix}/{name}`
+    /// for manifests created before random branch naming was introduced.
+    pub fn branch_name(&self, branch_prefix: &str) -> String {
+        self.branch
+            .clone()
+            .unwrap_or_else(|| format!("{branch_prefix}/{}", self.name))
+    }
 }
 
 /// Entry for a single repo within a workspace.
@@ -36,6 +48,7 @@ mod tests {
     fn test_workspace_manifest_round_trip() {
         let manifest = WorkspaceManifest {
             name: "my-feature".to_string(),
+            branch: None,
             created: Utc::now(),
             base_branch: Some("main".to_string()),
             preset: None,
@@ -61,6 +74,7 @@ mod tests {
     fn test_workspace_manifest_camel_case() {
         let manifest = WorkspaceManifest {
             name: "test".to_string(),
+            branch: None,
             created: Utc::now(),
             base_branch: Some("develop".to_string()),
             preset: None,

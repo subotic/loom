@@ -30,6 +30,7 @@ fn test_workspace_detection_integration() {
 
     let manifest = loom_core::manifest::WorkspaceManifest {
         name: ws_name.to_string(),
+        branch: None,
         created: chrono::Utc::now(),
         base_branch: Some("main".to_string()),
         preset: None,
