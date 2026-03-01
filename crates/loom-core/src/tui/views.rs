@@ -227,10 +227,7 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
             ])
             .areas(inner);
 
-            let prompt = Paragraph::new(format!(
-                "Select organization for '{}':",
-                name
-            ));
+            let prompt = Paragraph::new(format!("Select organization for '{}':", name));
             frame.render_widget(prompt, prompt_area);
 
             let rows: Vec<Row> = groups
