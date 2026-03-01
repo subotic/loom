@@ -70,6 +70,7 @@ pub fn list_workspaces(config: &Config) -> Result<Vec<WorkspaceSummary>> {
                 }
             }
             Err(e) => {
+                // Best-effort fallback; may be wrong for workspaces with random branch names
                 let branch = format!("{}/{}", config.defaults.branch_prefix, ws_index.name);
                 WorkspaceSummary {
                     name: ws_index.name.clone(),

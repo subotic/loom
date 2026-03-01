@@ -95,7 +95,11 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
 
     // Generate a random branch name that doesn't collide with existing refs
     let repo_paths: Vec<PathBuf> = opts.repos.iter().map(|r| r.path.clone()).collect();
-    let branch_name = crate::names::generate_unique_branch_name(branch_prefix, &repo_paths, 10)?;
+    let branch_name = crate::names::generate_unique_branch_name(
+        branch_prefix,
+        &repo_paths,
+        crate::names::MAX_NAME_RETRIES,
+    )?;
 
     // Write state.json FIRST (with 0 repos) — Ctrl+C safety
     let state_path = config.workspace.root.join(".loom").join("state.json");
@@ -123,8 +127,6 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
 
     // Process each repo
     for repo in &opts.repos {
-        let branch_name = branch_name.clone();
-
         match add_repo_to_workspace(
             &ws_path,
             repo,

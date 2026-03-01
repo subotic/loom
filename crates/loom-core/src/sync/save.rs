@@ -100,6 +100,7 @@ fn write_sync_manifest(
         name: manifest.name.clone(),
         created: manifest.created,
         status: SyncStatus::Active,
+        branch: manifest.branch.clone(),
         repos: manifest
             .repos
             .iter()

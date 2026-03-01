@@ -388,7 +388,7 @@ impl App {
                         let name = if name.is_empty() {
                             match crate::names::generate_unique_workspace_name(
                                 &self.config.workspace.root,
-                                10,
+                                crate::names::MAX_NAME_RETRIES,
                             ) {
                                 Ok(generated) => generated,
                                 Err(e) => {
@@ -396,6 +396,7 @@ impl App {
                                         format!("Failed to generate name: {e}"),
                                         StatusLevel::Error,
                                     );
+                                    // Restore wizard with the original (empty) name so the user can retry
                                     self.screen = Screen::NewWizard {
                                         step: WizardStep::EnterName,
                                         name,
