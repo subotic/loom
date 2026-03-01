@@ -2,6 +2,7 @@ pub mod agent;
 pub mod config;
 pub mod git;
 pub mod manifest;
+pub mod names;
 pub mod registry;
 pub mod sync;
 pub mod tui;
