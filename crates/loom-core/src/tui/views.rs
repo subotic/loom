@@ -184,7 +184,7 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
         name,
         available_repos,
         groups,
-        selected_groups,
+        selected_group,
         selected,
         focused,
     } = &app.screen
@@ -228,22 +228,17 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
             .areas(inner);
 
             let prompt = Paragraph::new(format!(
-                "Select org groups for '{}' (Space to toggle, Enter to confirm):",
+                "Select organization for '{}':",
                 name
             ));
             frame.render_widget(prompt, prompt_area);
 
-            // Count repos per group for display
             let rows: Vec<Row> = groups
                 .iter()
                 .enumerate()
                 .map(|(i, group)| {
                     let repo_count = available_repos.iter().filter(|r| r.org == *group).count();
-                    let marker = if selected_groups.contains(&i) {
-                        "[x]"
-                    } else {
-                        "[ ]"
-                    };
+                    let marker = if i == *focused { ">>" } else { "  " };
                     let style = if i == *focused {
                         Style::default().add_modifier(Modifier::REVERSED)
                     } else {
@@ -259,14 +254,14 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
                 .collect();
 
             let widths = [
-                Constraint::Length(4),
+                Constraint::Length(3),
                 Constraint::Min(20),
                 Constraint::Length(12),
             ];
             let table = Table::new(rows, widths);
             frame.render_widget(table, list_area);
 
-            let hint = Paragraph::new("Space: toggle  Enter: confirm  Esc: back")
+            let hint = Paragraph::new("Enter: select  Esc: back")
                 .style(Style::default().fg(Color::DarkGray));
             frame.render_widget(hint, hint_area);
         }
@@ -286,7 +281,7 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
 
             // Show only repos from selected groups
             let visible_indices =
-                App::filtered_repo_indices(available_repos, selected_groups, groups);
+                App::filtered_repo_indices(available_repos, &groups[*selected_group]);
             let rows: Vec<Row> = visible_indices
                 .iter()
                 .enumerate()
@@ -386,7 +381,7 @@ fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
             Screen::WorkspaceDetail { .. } => "Esc:back  d:teardown",
             Screen::NewWizard { step, .. } => match step {
                 WizardStep::EnterName => "Enter:next  Esc:cancel",
-                WizardStep::SelectGroups => "Space:toggle  Enter:confirm  Esc:back",
+                WizardStep::SelectGroups => "Enter:select  Esc:back",
                 WizardStep::SelectRepos => "Space:toggle  Enter:confirm  Esc:back",
                 WizardStep::Confirm => "Enter:create  Esc:back",
             },
