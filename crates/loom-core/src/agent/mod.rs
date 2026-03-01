@@ -105,6 +105,7 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -151,6 +152,7 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -190,6 +192,7 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -250,6 +253,7 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {

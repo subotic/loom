@@ -209,6 +209,7 @@ pub fn create_config(
         sync: None,
         terminal: terminal.map(|command| TerminalConfig { command }),
         defaults: DefaultsConfig { branch_prefix },
+        groups: BTreeMap::new(),
         repos: BTreeMap::new(),
         specs: None,
         agents: AgentsConfig {
@@ -516,6 +517,7 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -548,6 +550,7 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
@@ -604,6 +607,7 @@ auto_allow = true
             defaults: DefaultsConfig {
                 branch_prefix: "dev".to_string(),
             },
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(), // Doesn't matter — agents section is preserved
@@ -643,6 +647,7 @@ auto_allow = true
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
@@ -722,6 +727,7 @@ auto_allow = true
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
@@ -771,6 +777,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
