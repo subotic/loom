@@ -52,19 +52,24 @@ loom down
 
 ## Commands
 
+For detailed usage, flags, and config reference, see **[docs/USER-GUIDE.md](docs/USER-GUIDE.md)**.
+
 | Command | Description |
 |---------|-------------|
 | `loom init` | First-run setup — creates config with scan roots, workspace root, sync repo |
-| `loom new <name>` | Create a workspace with correlated worktrees |
+| `loom new [name]` | Create a workspace with correlated worktrees |
 | `loom add <repo>` | Add a repo to the current workspace |
 | `loom remove <repo>` | Remove a repo (refuses if dirty) |
-| `loom list` | List all workspaces |
-| `loom status` | Per-repo branch, dirty state, ahead/behind |
+| `loom list` / `loom ls` | List all workspaces |
+| `loom status [name]` | Per-repo branch, dirty state, ahead/behind |
 | `loom exec <cmd>` | Run a command across all repos in the workspace |
-| `loom shell` | Open a terminal in the workspace |
+| `loom shell [name]` | Open a terminal in the workspace |
 | `loom save` | Push branches and sync workspace manifest |
 | `loom open <name>` | Reconstruct a workspace from sync manifest (cross-machine) |
-| `loom down` | Tear down a workspace (safe — warns on dirty repos) |
+| `loom down [name]` | Tear down a workspace (safe — warns on dirty repos) |
+| `loom refresh [name]` | Regenerate agent files from current config |
+| `loom tui` | Open the interactive TUI |
+| `loom completions <shell>` | Generate shell completions (bash, zsh, fish, elvish, powershell) |
 
 ## Configuration
 

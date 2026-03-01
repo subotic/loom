@@ -2,6 +2,8 @@
 
 Rust CLI/TUI for multi-repo workspace orchestration with git worktrees.
 
+See [docs/USER-GUIDE.md](docs/USER-GUIDE.md) for the full user guide.
+
 ## Commit Conventions
 
 This repo uses **rebase merges only** — every commit lands on `main` as-is. Commits must tell a clear story because they:
