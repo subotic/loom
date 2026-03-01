@@ -681,10 +681,8 @@ impl Cli {
                 };
 
                 // Step 2: Filter repos to selected org, then pick repos
-                let filtered: Vec<&loom_core::registry::RepoEntry> = all_repos
-                    .iter()
-                    .filter(|r| r.org == selected_org)
-                    .collect();
+                let filtered: Vec<&loom_core::registry::RepoEntry> =
+                    all_repos.iter().filter(|r| r.org == selected_org).collect();
                 let labels: Vec<String> = filtered
                     .iter()
                     .map(|r| format!("{}/{}", r.org, r.name))
