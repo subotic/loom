@@ -422,6 +422,12 @@ impl Config {
     /// Validate only the agent config section (no path-existence checks).
     ///
     /// Use this during `loom init` where paths may not exist yet.
+    /// Validate agent permission and sandbox syntax only.
+    ///
+    /// This checks allowed_tools format, sandbox paths, and preset entries without
+    /// requiring that scan_roots or workspace.root exist on disk. Safe to call at
+    /// init time before directories are created. Does **not** check marketplace/plugin
+    /// entries — use [`validate()`](Self::validate) for the full post-load check.
     pub fn validate_agent_config(&self) -> Result<()> {
         let cc = &self.agents.claude_code;
         for entry in &cc.allowed_tools {
@@ -448,7 +454,8 @@ impl Config {
         Ok(())
     }
 
-    /// Validate the loaded config
+    /// Full post-load validation: path existence, branch prefix, marketplace/plugin
+    /// entries, and all agent config (delegates to [`validate_agent_config()`](Self::validate_agent_config)).
     pub fn validate(&self) -> Result<()> {
         // Validate scan_roots paths exist
         for root in &self.registry.scan_roots {

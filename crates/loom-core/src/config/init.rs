@@ -77,10 +77,12 @@ pub fn build_claude_code_config(flavor: SecurityFlavor) -> ClaudeCodeConfig {
             ..Default::default()
         },
         SecurityFlavor::Permissions => ClaudeCodeConfig {
+            // Illustrative defaults — users should replace with their own tool patterns.
             allowed_tools: vec!["Bash(gh issue *)".to_string(), "Bash(gh run *)".to_string()],
             ..Default::default()
         },
         SecurityFlavor::Both => ClaudeCodeConfig {
+            // Illustrative default — users should replace with their own tool patterns.
             allowed_tools: vec!["WebFetch(domain:docs.rs)".to_string()],
             sandbox: SandboxConfig {
                 enabled: Some(true),
@@ -126,7 +128,10 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
             "\
 \n# Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust]
-# allowed_tools = []
+# allowed_tools = [
+#     \"Bash(cargo test *)\",
+#     \"Bash(cargo clippy *)\",
+# ]
 #
 # [agents.claude-code.presets.rust.sandbox.filesystem]
 # allow_write = [\"~/.cargo\"]
@@ -252,7 +257,8 @@ pub fn save_init_config_to(config: &Config, flavor: SecurityFlavor, path: &Path)
 /// Uses `toml_edit` to parse the existing file, update only the non-agent sections
 /// (registry, workspace, terminal, defaults), and write back. The entire `[agents]`
 /// section — including `agents.enabled`, all `[agents.claude-code.*]` tables, and
-/// commented-out preset examples — is preserved byte-for-byte. If new `agents.enabled`
+/// commented-out preset examples — is preserved (formatting and comments intact,
+/// though minor whitespace normalisation may occur). If new `agents.enabled`
 /// entries need to be written during re-init, use `save_init_config` instead.
 pub fn update_non_agent_config(config: &Config) -> Result<()> {
     let path = Config::path()?;
