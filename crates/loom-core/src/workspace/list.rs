@@ -10,6 +10,7 @@ use crate::manifest::{self, WorkspaceManifest};
 #[derive(Debug)]
 pub struct WorkspaceSummary {
     pub name: String,
+    pub branch: String,
     pub path: PathBuf,
     pub repo_count: usize,
     pub status: WorkspaceHealth,
@@ -57,8 +58,10 @@ pub fn list_workspaces(config: &Config) -> Result<Vec<WorkspaceSummary>> {
                     WorkspaceHealth::Clean
                 };
 
+                let branch = manifest.branch_name(&config.defaults.branch_prefix);
                 WorkspaceSummary {
                     name: manifest.name,
+                    branch,
                     path: ws_index.path.clone(),
                     repo_count: manifest.repos.len(),
                     status,
@@ -66,14 +69,18 @@ pub fn list_workspaces(config: &Config) -> Result<Vec<WorkspaceSummary>> {
                     preset: manifest.preset,
                 }
             }
-            Err(e) => WorkspaceSummary {
-                name: ws_index.name.clone(),
-                path: ws_index.path.clone(),
-                repo_count: ws_index.repo_count,
-                status: WorkspaceHealth::Broken(e.to_string()),
-                created: ws_index.created,
-                preset: None,
-            },
+            Err(e) => {
+                let branch = format!("{}/{}", config.defaults.branch_prefix, ws_index.name);
+                WorkspaceSummary {
+                    name: ws_index.name.clone(),
+                    branch,
+                    path: ws_index.path.clone(),
+                    repo_count: ws_index.repo_count,
+                    status: WorkspaceHealth::Broken(e.to_string()),
+                    created: ws_index.created,
+                    preset: None,
+                }
+            }
         };
 
         summaries.push(summary);
