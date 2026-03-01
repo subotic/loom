@@ -169,6 +169,10 @@ pub struct PermissionPreset {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ClaudeCodeConfig {
+    /// Claude model alias or full model ID (e.g., "opus", "claude-opus-4-6")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+
     /// Extra marketplace repos
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra_known_marketplaces: Vec<MarketplaceEntry>,
@@ -193,7 +197,8 @@ pub struct ClaudeCodeConfig {
 impl ClaudeCodeConfig {
     /// Returns true when all fields are empty (used by serde skip_serializing_if and init re-check).
     pub fn is_empty(&self) -> bool {
-        self.extra_known_marketplaces.is_empty()
+        self.model.is_none()
+            && self.extra_known_marketplaces.is_empty()
             && self.enabled_plugins.is_empty()
             && self.allowed_tools.is_empty()
             && self.sandbox.is_empty()
@@ -487,6 +492,11 @@ impl Config {
     /// entries — use [`validate()`](Self::validate) for the full post-load check.
     pub fn validate_agent_config(&self) -> Result<()> {
         let cc = &self.agents.claude_code;
+        if let Some(ref model) = cc.model
+            && model.trim().is_empty()
+        {
+            anyhow::bail!("agents.claude-code.model cannot be empty or whitespace-only");
+        }
         for entry in &cc.allowed_tools {
             validate_permission_entry(entry, "agents.claude-code.allowed_tools")?;
         }
@@ -1315,6 +1325,37 @@ enabled = ["claude-code"]
     }
 
     #[test]
+    fn test_validate_empty_model_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    model: Some("  ".to_string()),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("cannot be empty or whitespace-only")
+        );
+    }
+
+    #[test]
     fn test_validate_sandbox_empty_path() {
         let dir = tempfile::tempdir().unwrap();
         let config = Config {
@@ -1440,6 +1481,7 @@ enabled = ["claude-code"]
                         },
                     },
                     presets,
+                    ..Default::default()
                 },
             },
         };
