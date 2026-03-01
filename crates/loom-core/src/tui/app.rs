@@ -311,7 +311,7 @@ impl App {
                     Screen::ConfirmDialog { .. } => {
                         self.refresh_workspaces();
                     }
-                    _ => {}
+                    Screen::WorkspaceList => { /* already home */ }
                 }
             }
 

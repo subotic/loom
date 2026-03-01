@@ -276,9 +276,11 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
             ));
             frame.render_widget(prompt, prompt_area);
 
-            // Show only repos from selected groups
-            let visible_indices =
-                App::filtered_repo_indices(available_repos, &groups[*selected_group]);
+            // Show only repos from selected org
+            let Some(org) = groups.get(*selected_group) else {
+                return;
+            };
+            let visible_indices = App::filtered_repo_indices(available_repos, org);
             let rows: Vec<Row> = visible_indices
                 .iter()
                 .enumerate()
