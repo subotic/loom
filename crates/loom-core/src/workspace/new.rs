@@ -270,6 +270,7 @@ fn cleanup_stale_loom_worktrees(git_repo: &GitRepo) -> Result<()> {
 mod tests {
     use super::*;
     use crate::config::{AgentsConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
+    use std::collections::BTreeMap;
 
     fn test_config(dir: &std::path::Path) -> Config {
         let ws_root = dir.join("loom");
@@ -280,6 +281,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         }
     }

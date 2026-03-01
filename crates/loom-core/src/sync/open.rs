@@ -341,6 +341,7 @@ mod tests {
     use crate::config::{
         AgentsConfig, DefaultsConfig, RegistryConfig, SyncConfig, WorkspaceConfig,
     };
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_derive_clone_path() {
@@ -354,6 +355,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         };
 
@@ -373,6 +376,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         };
 
@@ -390,6 +395,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         };
 
@@ -408,6 +415,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         };
 
@@ -458,6 +467,8 @@ mod tests {
             }),
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         };
 
