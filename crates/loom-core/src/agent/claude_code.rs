@@ -249,6 +249,10 @@ fn generate_settings(
         "additionalDirectories": paths
     });
 
+    if let Some(ref model) = cc_config.model {
+        obj["model"] = serde_json::json!(model);
+    }
+
     if !cc_config.extra_known_marketplaces.is_empty() {
         let mut marketplaces = serde_json::Map::new();
         for entry in &cc_config.extra_known_marketplaces {
@@ -366,6 +370,17 @@ mod tests {
     fn test_settings_snapshot() {
         let manifest = test_manifest();
         let cc_config = ClaudeCodeConfig::default();
+        let content = generate_settings(&manifest, &cc_config, None);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_with_model_snapshot() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            model: Some("opus".to_string()),
+            ..Default::default()
+        };
         let content = generate_settings(&manifest, &cc_config, None);
         insta::assert_snapshot!(content);
     }
@@ -712,6 +727,7 @@ mod tests {
                 },
             },
             presets,
+            ..Default::default()
         };
 
         let content = generate_settings(&manifest, &cc_config, Some("rust"));
