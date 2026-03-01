@@ -250,17 +250,34 @@ pub fn save_init_config_to(config: &Config, flavor: SecurityFlavor, path: &Path)
 /// Update an existing config file preserving the `[agents.*]` sections and comments.
 ///
 /// Uses `toml_edit` to parse the existing file, update only the non-agent sections
-/// (registry, workspace, terminal, defaults), and write back. The `[agents.claude-code]`
-/// section (including commented-out preset examples) is preserved byte-for-byte.
+/// (registry, workspace, terminal, defaults), and write back. The entire `[agents]`
+/// section — including `agents.enabled`, all `[agents.claude-code.*]` tables, and
+/// commented-out preset examples — is preserved byte-for-byte. If new `agents.enabled`
+/// entries need to be written during re-init, use `save_init_config` instead.
 pub fn update_non_agent_config(config: &Config) -> Result<()> {
     let path = Config::path()?;
-    update_non_agent_config_at(config, &path)
+    update_non_agent_config_at(config, &path, None)
 }
 
 /// Update config at a specific path, preserving agents section and comments.
-pub fn update_non_agent_config_at(config: &Config, path: &Path) -> Result<()> {
-    let existing = std::fs::read_to_string(path)
-        .with_context(|| format!("Failed to read existing config at {}", path.display()))?;
+///
+/// If `existing_content` is provided, it is used directly instead of re-reading from disk.
+/// This avoids redundant I/O when the caller has already read the file (e.g., for agent
+/// config detection during re-init).
+pub fn update_non_agent_config_at(
+    config: &Config,
+    path: &Path,
+    existing_content: Option<&str>,
+) -> Result<()> {
+    let owned;
+    let existing = match existing_content {
+        Some(content) => content,
+        None => {
+            owned = std::fs::read_to_string(path)
+                .with_context(|| format!("Failed to read existing config at {}", path.display()))?;
+            &owned
+        }
+    };
 
     let mut doc: toml_edit::DocumentMut = existing
         .parse()
@@ -562,7 +579,7 @@ auto_allow = true
             agents: AgentsConfig::default(), // Doesn't matter — agents section is preserved
         };
 
-        update_non_agent_config_at(&config, &config_path).unwrap();
+        update_non_agent_config_at(&config, &config_path, None).unwrap();
 
         let content = std::fs::read_to_string(&config_path).unwrap();
 

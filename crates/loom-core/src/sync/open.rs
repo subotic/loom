@@ -144,12 +144,13 @@ pub fn open_workspace(config: &Config, name: &str) -> Result<OpenResult> {
     std::fs::create_dir_all(&ws_path)
         .with_context(|| format!("Failed to create workspace directory {}", ws_path.display()))?;
 
-    // Write workspace manifest
+    // Write workspace manifest, preserving preset from existing local manifest
+    let existing_preset = existing_manifest.as_ref().and_then(|m| m.preset.clone());
     let ws_manifest = WorkspaceManifest {
         name: name.to_string(),
         created: sync_manifest.created,
         base_branch: None,
-        preset: None,
+        preset: existing_preset,
         repos: ws_repos,
     };
     manifest::write_manifest(&ws_path.join(MANIFEST_FILENAME), &ws_manifest)?;
