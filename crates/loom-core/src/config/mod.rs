@@ -190,8 +190,8 @@ pub struct ClaudeCodeConfig {
 }
 
 impl ClaudeCodeConfig {
-    /// Returns true when all fields are empty (used by serde skip_serializing_if).
-    pub(crate) fn is_empty(&self) -> bool {
+    /// Returns true when all fields are empty (used by serde skip_serializing_if and init re-check).
+    pub fn is_empty(&self) -> bool {
         self.extra_known_marketplaces.is_empty()
             && self.enabled_plugins.is_empty()
             && self.allowed_tools.is_empty()
