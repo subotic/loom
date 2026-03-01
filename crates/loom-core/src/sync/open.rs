@@ -93,8 +93,6 @@ pub fn open_workspace(config: &Config, name: &str) -> Result<OpenResult> {
     let mut warnings = Vec::new();
     let mut ws_repos = Vec::new();
 
-    let branch_prefix = &config.defaults.branch_prefix;
-
     for sync_repo in &sync_manifest.repos {
         match restore_repo(
             config,
@@ -102,7 +100,6 @@ pub fn open_workspace(config: &Config, name: &str) -> Result<OpenResult> {
             sync_repo,
             &local_repos,
             existing_manifest.as_ref(),
-            branch_prefix,
             name,
         ) {
             Ok(RestoreResult::Restored(entry)) => {
@@ -194,7 +191,6 @@ fn restore_repo(
     sync_repo: &SyncRepoEntry,
     local_repos: &[registry::RepoEntry],
     existing_manifest: Option<&WorkspaceManifest>,
-    branch_prefix: &str,
     ws_name: &str,
 ) -> Result<RestoreResult> {
     // Check if already exists in current workspace manifest
@@ -262,7 +258,7 @@ fn restore_repo(
 
     // Create worktree
     let worktree_path = ws_path.join(&sync_repo.name);
-    let branch_name = format!("{branch_prefix}/{ws_name}");
+    let branch_name = sync_repo.branch.clone();
 
     if !worktree_path.exists() {
         // Try creating worktree with new branch

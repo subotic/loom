@@ -24,8 +24,7 @@ pub fn add_repo(
         );
     }
 
-    let branch_prefix = &config.defaults.branch_prefix;
-    let branch_name = format!("{}/{}", branch_prefix, manifest.name);
+    let branch_name = manifest.branch_name(&config.defaults.branch_prefix);
 
     let git_repo = GitRepo::new(&repo.path);
 

@@ -100,7 +100,7 @@ fn generate_claude_md(manifest: &WorkspaceManifest, config: &Config) -> String {
     if has_workflow_config && !manifest.repos.is_empty() {
         let has_pr = config.repos.values().any(|r| r.workflow == Workflow::Pr);
         let has_push = config.repos.values().any(|r| r.workflow == Workflow::Push);
-        let ws_branch = format!("{}/{}", config.defaults.branch_prefix, manifest.name);
+        let ws_branch = manifest.branch_name(&config.defaults.branch_prefix);
 
         md.push_str("\n### Workflows\n\n");
         if has_pr {
