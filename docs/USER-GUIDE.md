@@ -7,7 +7,7 @@
 | Command | Description | Key Flags |
 |---------|-------------|-----------|
 | `loom init` | First-run setup — creates `~/.config/loom/config.toml` | — |
-| `loom new [name]` | Create a workspace with correlated worktrees | `--base`, `--repos`, `--preset` |
+| `loom new [name]` | Create a workspace with correlated worktrees | `--base`, `--repos`, `--groups`, `--preset` |
 | `loom add <repo>` | Add a repo to an existing workspace | `--workspace` |
 | `loom remove <repo>` | Remove a repo from the current workspace | `--force` |
 | `loom list` / `loom ls` | List all workspaces | — |
@@ -228,7 +228,7 @@ No arguments, no flags — fully interactive. See [Setting Up: loom init](#setti
 Create a new workspace with correlated worktrees.
 
 ```
-loom new [NAME] [--base BRANCH] [--repos REPO,...] [--preset NAME]
+loom new [NAME] [--base BRANCH] [--repos REPO,...] [--groups GROUP,...] [--preset NAME]
 ```
 
 | Flag | Description |
@@ -236,6 +236,7 @@ loom new [NAME] [--base BRANCH] [--repos REPO,...] [--preset NAME]
 | `[NAME]` | Workspace name. Optional — a random `adjective-modifier-noun` name is generated if omitted. |
 | `--base BRANCH` | Base branch for worktrees (default: each repo's default branch). Fetches and validates the ref exists. |
 | `--repos REPO,...` | Comma-separated repo names. Skips interactive repo selection. |
+| `--groups GROUP,...` | Comma-separated group names from `[groups]` config. Either `--repos` or `--groups` (or both) enables non-interactive mode. |
 | `--preset NAME` | Apply a named permission preset from config.toml. |
 
 **Examples:**
@@ -252,6 +253,10 @@ $ loom new my-feature --repos dsp-api,dsp-das
 ```
 
 ```
+$ loom new my-feature --groups backend
+```
+
+```
 $ loom new --preset rust
 ✓ Created workspace: amber-swift-fox
   Branch: loom/gentle-river-stone
@@ -261,7 +266,8 @@ $ loom new --preset rust
 **Notes:**
 - **Workspace name** and **branch name** are independently generated. The manifest stores the branch name; older manifests without a `branch` field fall back to `{prefix}/{workspace-name}`.
 - **Name validation:** lowercase alphanumeric + hyphens, max 63 characters, no leading or trailing hyphens.
-- **Interactive mode** (no `--repos`): presents org group multi-select → repo multi-select. If only one org exists, the org selection is skipped.
+- **Interactive mode** (no `--repos` or `--groups`): if `[groups]` are defined in config, presents a group multi-select first (`[G]` config groups + `[O]` org groups), then repo multi-select. Config group selections pre-check repos. If no config groups AND ≤1 org, skips straight to repo selection.
+- **`--groups` + `--repos`:** group repos are added first, then `--repos`, deduped by path, sorted by (org, name). Unknown group names → hard error. Missing repos in a group → non-fatal warning.
 - **Partial failure:** if a worktree fails for one repo, others continue. Errors are reported at the end.
 
 ---
@@ -553,6 +559,7 @@ Configuration lives at `~/.config/loom/config.toml`. Created by `loom init`, edi
 | `[sync]` | No | Sync disabled (`loom open` unavailable) |
 | `[terminal]` | No | Detected from `TERM_PROGRAM` env var |
 | `[defaults]` | No | `branch_prefix = "loom"` |
+| `[groups]` | No | No groups defined |
 | `[repos.<name>]` | No | `workflow = "pr"` for all repos |
 | `[specs]` | No | No specs section in generated CLAUDE.md |
 | `[agents]` | No | No agent files generated |
@@ -592,6 +599,11 @@ command = "ghostty"                        # Terminal for `loom shell`
 
 [defaults]
 branch_prefix = "loom"                     # Prefix for worktree branches (loom/<random-name>)
+
+# Named repo groups for quick selection in loom new
+[groups]
+backend = ["dsp-api", "dsp-das", "sipi"]     # Bare names match any org
+frontend = ["dsp-app"]                         # Or use "org/repo" for qualified match
 
 # Per-repo workflow overrides
 [repos.my-library]
@@ -681,6 +693,20 @@ Omit this entire section to disable cross-machine sync. `loom save` still pushes
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `branch_prefix` | `string` | `"loom"` | Prefix for worktree branch names. Branches are created as `{prefix}/{random-name}`. |
+
+#### `[groups]` (Optional)
+
+Named repository collections for quick workspace creation with `loom new --groups` or interactive selection.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `<name>` | `string[]` | — | List of repo names. Bare format (`"dsp-api"`) matches any org. Qualified format (`"dasch-swiss/dsp-api"`) matches a specific org. |
+
+```toml
+[groups]
+backend = ["dsp-api", "dsp-das", "sipi"]
+frontend = ["dsp-app", "dsp-dashboard"]
+```
 
 #### `[repos.<name>]` (Optional, per-repo)
 
@@ -780,6 +806,10 @@ scan_roots = ["~/_github.com"]
 
 [workspace]
 root = "~/workspaces"
+
+[groups]
+backend = ["dsp-api", "dsp-das"]
+frontend = ["dsp-app"]
 
 [agents]
 enabled = ["claude-code"]
@@ -1229,11 +1259,12 @@ Shows: workspace path, repo count, and per-repo table (REPO, BRANCH, STATUS, AHE
 | Step | Keys |
 |------|------|
 | **1. Enter name** | Type name, `Enter` to confirm (empty = random name), `Esc` to cancel |
-| **2. Select org groups** | `Space` to toggle, `Enter` to confirm, `Esc` to go back |
-| **3. Select repos** | `Space` to toggle, `Enter` to confirm, `Esc` to go back |
+| **2. Select groups** | `Space` to toggle, `Enter` to confirm, `Esc` to go back. Shows `[G]` config groups and `[O]` org groups with repo counts. |
+| **3. Select repos** | `Space` to toggle, `Enter` to confirm, `Esc` to go back. Config group selections pre-check repos. |
 | **4. Confirm** | `Enter` to create, `Esc` to go back |
 
-- If only one org exists, step 2 is skipped (auto-selected).
+- If no config groups exist AND ≤1 org, step 2 is skipped.
+- Config group selections pre-check repos in step 3; org groups only filter visibility.
 - Name accepts lowercase alphanumeric + hyphens only.
 
 #### ConfirmDialog (teardown)
@@ -1251,9 +1282,11 @@ Shows: workspace path, repo count, and per-repo table (REPO, BRANCH, STATUS, AHE
 | Choose name | Yes | Yes |
 | Random name | Yes (leave empty) | Yes (omit `[NAME]`) |
 | Select repos | Interactive toggle | `--repos` flag or interactive |
+| Select groups | Interactive toggle (`[G]`/`[O]` labels) | `--groups` flag or interactive |
 | `--base` flag | No | Yes |
 | `--preset` flag | No | Yes |
 | `--repos` (non-interactive) | No | Yes |
+| `--groups` (non-interactive) | No | Yes |
 | View workspaces | Yes | `loom list` |
 | View workspace detail | Yes | `loom status` |
 | Tear down workspace | Yes | `loom down` |
@@ -1261,7 +1294,7 @@ Shows: workspace path, repo count, and per-repo table (REPO, BRANCH, STATUS, AHE
 | Dirty repo teardown | Fails (no interactive prompt) | Prompts interactively |
 | List columns | NAME, REPOS, STATUS, CREATED | NAME, REPOS, STATUS, BRANCH, PRESET, CREATED |
 
-**When to use the TUI:** Quick workspace creation and overview. **When to use the CLI:** Advanced flags (`--base`, `--preset`), scripting, force operations.
+**When to use the TUI:** Quick workspace creation and overview. **When to use the CLI:** Advanced flags (`--base`, `--preset`, `--groups`), scripting, force operations.
 
 ---
 
