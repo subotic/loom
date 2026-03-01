@@ -1,0 +1,47 @@
+---
+source: crates/loom-core/src/agent/claude_code.rs
+expression: content
+---
+# LOOM Workspace: my-feature
+
+This workspace was created by [LOOM](https://github.com/subotic/loom) and contains linked worktrees for multi-repo development.
+
+## Repositories
+
+| Directory | Branch | Source | Workflow |
+|-----------|--------|--------|----------|
+| `dsp-api` | `loom/my-feature` | git@github.com:dasch-swiss/dsp-api.git | PR to `main` |
+| `dsp-das` | `loom/my-feature` | git@github.com:dasch-swiss/dsp-das.git | Push to `main` |
+
+## Working in this workspace
+
+- Each subdirectory is a git worktree checked out on the workspace branch.
+- Changes in one repo's worktree do not affect the original repo until pushed.
+- Each repo may have its own `CLAUDE.md` with repo-specific context.
+- Use `loom exec <cmd>` to run a command across all repos.
+- Use `loom save` to push all branches.
+- Use `loom status` to see per-repo branch and dirty state.
+
+### Workflows
+
+- **PR to `main`**: Create a branch off `origin/main`, commit there, push, and open a PR. Do not push the workspace branch.
+- **Push to `main`**: Commit on the workspace branch, then push directly to `main` (`git push origin HEAD:main`).
+
+After creating a PR, continue working on the workspace branch `loom/my-feature`.
+
+## Specs (PRDs and Implementation Plans)
+
+Specs for this workspace are stored in:
+
+```
+pkm/01 - PROJECTS/Personal/LOOM/specs/
+└── YYYY-MM-DD-{title-slug}/
+    ├── {nn}-{topic}-PRD.md
+    └── {nn}-{type}-{topic}-plan.md
+```
+
+- **Folder naming:** `YYYY-MM-DD-{title-slug}/` (creation date of first artifact)
+- **File naming:** `{nn}` is per-folder sequential numbering (zero-padded, starting at `01`)
+  - PRDs: `{nn}-{topic}-PRD.md`
+  - Plans: `{nn}-{type}-{topic}-plan.md` where `{type}` is `feat`, `fix`, or `refactor`
+- PRDs and plans share the same numbering sequence within a folder

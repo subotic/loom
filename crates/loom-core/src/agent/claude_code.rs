@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::agent::{AgentGenerator, GeneratedFile};
-use crate::config::Config;
+use crate::config::{Config, Workflow};
 use crate::manifest::WorkspaceManifest;
 
 /// Generates CLAUDE.md and .claude/settings.json for Claude Code.
@@ -17,7 +17,7 @@ impl AgentGenerator for ClaudeCodeGenerator {
         manifest: &WorkspaceManifest,
         config: &Config,
     ) -> Result<Vec<GeneratedFile>> {
-        let claude_md = generate_claude_md(manifest);
+        let claude_md = generate_claude_md(manifest, config);
         let settings = generate_settings(
             manifest,
             &config.agents.claude_code,
@@ -38,8 +38,11 @@ impl AgentGenerator for ClaudeCodeGenerator {
 }
 
 /// Generate workspace CLAUDE.md content.
-fn generate_claude_md(manifest: &WorkspaceManifest) -> String {
+fn generate_claude_md(manifest: &WorkspaceManifest, config: &Config) -> String {
     let mut md = String::new();
+
+    let has_workflow_config = !config.repos.is_empty();
+    let default_branch = manifest.base_branch.as_deref().unwrap_or("main");
 
     md.push_str(&format!("# LOOM Workspace: {}\n\n", manifest.name));
     md.push_str(
@@ -49,8 +52,14 @@ fn generate_claude_md(manifest: &WorkspaceManifest) -> String {
 
     if !manifest.repos.is_empty() {
         md.push_str("## Repositories\n\n");
-        md.push_str("| Directory | Branch | Source |\n");
-        md.push_str("|-----------|--------|--------|\n");
+
+        if has_workflow_config {
+            md.push_str("| Directory | Branch | Source | Workflow |\n");
+            md.push_str("|-----------|--------|--------|----------|\n");
+        } else {
+            md.push_str("| Directory | Branch | Source |\n");
+            md.push_str("|-----------|--------|--------|\n");
+        }
 
         for repo in &manifest.repos {
             let dir = repo.name.as_str();
@@ -60,7 +69,20 @@ fn generate_claude_md(manifest: &WorkspaceManifest) -> String {
             } else {
                 repo.remote_url.clone()
             };
-            md.push_str(&format!("| `{dir}` | `{branch}` | {source} |\n"));
+
+            if has_workflow_config {
+                let workflow = config
+                    .repos
+                    .get(dir)
+                    .map(|r| r.workflow)
+                    .unwrap_or_default();
+                let workflow_label = workflow.label(default_branch);
+                md.push_str(&format!(
+                    "| `{dir}` | `{branch}` | {source} | {workflow_label} |\n"
+                ));
+            } else {
+                md.push_str(&format!("| `{dir}` | `{branch}` | {source} |\n"));
+            }
         }
 
         md.push('\n');
@@ -73,6 +95,56 @@ fn generate_claude_md(manifest: &WorkspaceManifest) -> String {
     md.push_str("- Use `loom exec <cmd>` to run a command across all repos.\n");
     md.push_str("- Use `loom save` to push all branches.\n");
     md.push_str("- Use `loom status` to see per-repo branch and dirty state.\n");
+
+    // Workflows subsection (only when config has repo entries AND manifest has repos)
+    if has_workflow_config && !manifest.repos.is_empty() {
+        let has_pr = config.repos.values().any(|r| r.workflow == Workflow::Pr);
+        let has_push = config.repos.values().any(|r| r.workflow == Workflow::Push);
+        let ws_branch = format!("{}/{}", config.defaults.branch_prefix, manifest.name);
+
+        md.push_str("\n### Workflows\n\n");
+        if has_pr {
+            md.push_str(&format!(
+                "- **PR to `{default_branch}`**: Create a branch off `origin/{default_branch}`, \
+                 commit there, push, and open a PR. Do not push the workspace branch.\n"
+            ));
+        }
+        if has_push {
+            md.push_str(&format!(
+                "- **Push to `{default_branch}`**: Commit on the workspace branch, then push \
+                 directly to `{default_branch}` (`git push origin HEAD:{default_branch}`).\n"
+            ));
+        }
+        if has_pr {
+            md.push_str(&format!(
+                "\nAfter creating a PR, continue working on the workspace branch `{ws_branch}`.\n"
+            ));
+        }
+    }
+
+    // Specs section
+    if let Some(specs) = &config.specs {
+        md.push_str("\n## Specs (PRDs and Implementation Plans)\n\n");
+        md.push_str("Specs for this workspace are stored in:\n\n```\n");
+        md.push_str(&format!("{}/\n", specs.path));
+        md.push_str("└── YYYY-MM-DD-{title-slug}/\n");
+        md.push_str("    ├── {nn}-{topic}-PRD.md\n");
+        md.push_str("    └── {nn}-{type}-{topic}-plan.md\n");
+        md.push_str("```\n\n");
+        md.push_str(
+            "- **Folder naming:** `YYYY-MM-DD-{title-slug}/` (creation date of first artifact)\n",
+        );
+        md.push_str(
+            "- **File naming:** `{nn}` is per-folder sequential numbering \
+             (zero-padded, starting at `01`)\n",
+        );
+        md.push_str("  - PRDs: `{nn}-{topic}-PRD.md`\n");
+        md.push_str(
+            "  - Plans: `{nn}-{type}-{topic}-plan.md` where `{type}` is \
+             `feat`, `fix`, or `refactor`\n",
+        );
+        md.push_str("- PRDs and plans share the same numbering sequence within a folder\n");
+    }
 
     md
 }
@@ -233,8 +305,8 @@ mod tests {
     use super::*;
     use crate::config::{
         AgentsConfig, ClaudeCodeConfig, DefaultsConfig, MarketplaceEntry, PermissionPreset,
-        PresetSandboxConfig, RegistryConfig, SandboxConfig, SandboxFilesystemConfig,
-        SandboxNetworkConfig, WorkspaceConfig,
+        PresetSandboxConfig, RegistryConfig, RepoConfig, SandboxConfig, SandboxFilesystemConfig,
+        SandboxNetworkConfig, SpecsConfig, Workflow, WorkspaceConfig,
     };
     use crate::manifest::RepoManifestEntry;
     use std::collections::BTreeMap;
@@ -276,6 +348,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         }
     }
@@ -283,7 +357,8 @@ mod tests {
     #[test]
     fn test_claude_md_snapshot() {
         let manifest = test_manifest();
-        let content = generate_claude_md(&manifest);
+        let config = test_config();
+        let content = generate_claude_md(&manifest, &config);
         insta::assert_snapshot!(content);
     }
 
@@ -319,8 +394,9 @@ mod tests {
             preset: None,
             repos: vec![],
         };
+        let config = test_config();
 
-        let content = generate_claude_md(&manifest);
+        let content = generate_claude_md(&manifest, &config);
         assert!(content.contains("# LOOM Workspace: empty-ws"));
         assert!(!content.contains("## Repositories"));
     }
@@ -380,9 +456,97 @@ mod tests {
             }],
         };
 
-        let content = generate_claude_md(&manifest);
+        let config = test_config();
+        let content = generate_claude_md(&manifest, &config);
         // Should fall back to original_path when remote_url is empty
         assert!(content.contains("/code/my-repo"));
+    }
+
+    fn test_config_with_workflows() -> Config {
+        let mut config = test_config();
+        config.repos.insert(
+            "dsp-api".to_string(),
+            RepoConfig {
+                workflow: Workflow::Pr,
+            },
+        );
+        config.repos.insert(
+            "dsp-das".to_string(),
+            RepoConfig {
+                workflow: Workflow::Push,
+            },
+        );
+        config
+    }
+
+    fn test_config_with_specs() -> Config {
+        let mut config = test_config();
+        config.specs = Some(SpecsConfig {
+            path: "pkm/01 - PROJECTS/Personal/LOOM/specs".to_string(),
+        });
+        config
+    }
+
+    fn test_config_full() -> Config {
+        let mut config = test_config_with_workflows();
+        config.specs = Some(SpecsConfig {
+            path: "pkm/01 - PROJECTS/Personal/LOOM/specs".to_string(),
+        });
+        config
+    }
+
+    #[test]
+    fn test_claude_md_with_workflows_snapshot() {
+        let manifest = test_manifest();
+        let config = test_config_with_workflows();
+        let content = generate_claude_md(&manifest, &config);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_claude_md_with_specs_snapshot() {
+        let manifest = test_manifest();
+        let config = test_config_with_specs();
+        let content = generate_claude_md(&manifest, &config);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_claude_md_full_snapshot() {
+        let manifest = test_manifest();
+        let config = test_config_full();
+        let content = generate_claude_md(&manifest, &config);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_claude_md_custom_default_branch() {
+        let mut manifest = test_manifest();
+        manifest.base_branch = Some("develop".to_string());
+        let config = test_config_with_workflows();
+        let content = generate_claude_md(&manifest, &config);
+        assert!(content.contains("PR to `develop`"));
+        assert!(content.contains("Push to `develop`"));
+        assert!(!content.contains("PR to `main`"));
+    }
+
+    #[test]
+    fn test_claude_md_empty_repos_with_workflow_config() {
+        let manifest = WorkspaceManifest {
+            name: "empty-ws".to_string(),
+            created: chrono::DateTime::parse_from_rfc3339("2026-02-27T10:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+            base_branch: None,
+            preset: None,
+            repos: vec![],
+        };
+        let config = test_config_with_workflows();
+        let content = generate_claude_md(&manifest, &config);
+        // Empty manifest repos should suppress the table entirely,
+        // even when config.repos has entries
+        assert!(!content.contains("## Repositories"));
+        assert!(!content.contains("Workflow"));
     }
 
     #[test]
