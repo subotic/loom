@@ -10,6 +10,7 @@ authors.workspace = true
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
+fastrand.workspace = true
 dialoguer.workspace = true
 dirs.workspace = true
 ratatui.workspace = true
