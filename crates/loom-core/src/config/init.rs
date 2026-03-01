@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use std::io::Write;
+
 use anyhow::{Context, Result};
 
 use super::{
@@ -219,6 +221,9 @@ pub fn save_init_config(config: &Config, flavor: SecurityFlavor) -> Result<()> {
 
 /// Save config to a specific path with commented preset examples appended.
 pub fn save_init_config_to(config: &Config, flavor: SecurityFlavor, path: &Path) -> Result<()> {
+    // Validate agent config before writing (defense in depth)
+    config.validate_agent_config()?;
+
     let mut content =
         toml::to_string_pretty(config).context("Failed to serialize config to TOML")?;
 
@@ -232,10 +237,10 @@ pub fn save_init_config_to(config: &Config, flavor: SecurityFlavor, path: &Path)
 
     // Atomic write
     let parent = path.parent().unwrap_or(Path::new("."));
-    let tmp = tempfile::NamedTempFile::new_in(parent)
+    let mut tmp = tempfile::NamedTempFile::new_in(parent)
         .with_context(|| format!("Failed to create temp file in {}", parent.display()))?;
-    std::fs::write(tmp.path(), content.as_bytes())
-        .with_context(|| "Failed to write config to temp file".to_string())?;
+    tmp.write_all(content.as_bytes())
+        .with_context(|| "Failed to write config to temp file")?;
     tmp.persist(path)
         .with_context(|| format!("Failed to persist config to {}", path.display()))?;
 
@@ -291,10 +296,10 @@ pub fn update_non_agent_config_at(config: &Config, path: &Path) -> Result<()> {
     // Write back atomically
     let content = doc.to_string();
     let parent = path.parent().unwrap_or(Path::new("."));
-    let tmp = tempfile::NamedTempFile::new_in(parent)
+    let mut tmp = tempfile::NamedTempFile::new_in(parent)
         .with_context(|| format!("Failed to create temp file in {}", parent.display()))?;
-    std::fs::write(tmp.path(), content.as_bytes())
-        .with_context(|| "Failed to write config to temp file".to_string())?;
+    tmp.write_all(content.as_bytes())
+        .with_context(|| "Failed to write config to temp file")?;
     tmp.persist(path)
         .with_context(|| format!("Failed to persist config to {}", path.display()))?;
 

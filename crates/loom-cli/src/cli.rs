@@ -165,9 +165,16 @@ impl Cli {
         let existing_has_agent_config = if is_reinit {
             // Check if existing config has non-empty agent config
             let existing_content = std::fs::read_to_string(&config_path)?;
-            let existing: loom_core::config::Config = toml::from_str(&existing_content)
-                .unwrap_or_else(|_| loom_core::config::Config::default_config());
-            !existing.agents.claude_code.is_empty()
+            match toml::from_str::<loom_core::config::Config>(&existing_content) {
+                Ok(existing) => !existing.agents.claude_code.is_empty(),
+                Err(e) => {
+                    eprintln!(
+                        "  Warning: existing config has syntax errors: {e}\n  \
+                         Agent settings will NOT be preserved. Fix config.toml manually if needed."
+                    );
+                    false
+                }
+            }
         } else {
             false
         };
@@ -715,26 +722,10 @@ impl Cli {
                 manifest.preset = None;
             } else {
                 // Validate preset exists in config
-                if !config.agents.claude_code.presets.contains_key(preset_value) {
-                    let available: Vec<&String> =
-                        config.agents.claude_code.presets.keys().collect();
-                    if available.is_empty() {
-                        anyhow::bail!(
-                            "Preset '{}' not found. No presets defined in config.toml.",
-                            preset_value
-                        );
-                    } else {
-                        anyhow::bail!(
-                            "Preset '{}' not found. Available presets: {}",
-                            preset_value,
-                            available
-                                .iter()
-                                .map(|s| s.as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        );
-                    }
-                }
+                loom_core::config::validate_preset_exists(
+                    &config.agents.claude_code.presets,
+                    preset_value,
+                )?;
                 manifest.preset = Some(preset_value.clone());
             }
             // Save updated manifest
