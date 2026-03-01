@@ -18,6 +18,10 @@ pub struct Config {
     pub terminal: Option<TerminalConfig>,
     #[serde(default)]
     pub defaults: DefaultsConfig,
+    /// Named repo groups for quick workspace creation.
+    /// Each group maps a name to a list of repo names (bare or org/name).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub groups: BTreeMap<String, Vec<String>>,
     /// Per-repo settings (e.g., workflow). Keyed by repo name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub repos: BTreeMap<String, RepoConfig>,
@@ -453,6 +457,7 @@ impl Config {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
@@ -607,6 +612,20 @@ impl Config {
             }
         }
 
+        // Validate groups.
+        // Note: group repo names are NOT cross-validated against the registry here
+        // because the registry is discovered at runtime from scan_roots (not available
+        // at config load time). Validation of repo names happens at workspace creation.
+        for (name, repos) in &self.groups {
+            crate::manifest::validate_name(name)
+                .with_context(|| format!("groups: invalid group name '{name}'"))?;
+            if repos.is_empty() {
+                anyhow::bail!("groups.{name}: group must contain at least one repo");
+            }
+            validate_no_empty_entries(repos, &format!("groups.{name}"))?;
+            validate_no_duplicates(repos, &format!("groups.{name}"))?;
+        }
+
         // Validate specs config
         if let Some(specs) = &self.specs {
             if specs.path.trim().is_empty() {
@@ -653,6 +672,7 @@ mod tests {
             defaults: DefaultsConfig {
                 branch_prefix: "loom".to_string(),
             },
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -718,6 +738,7 @@ root = "/loom"
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
@@ -745,6 +766,7 @@ root = "/loom"
             defaults: DefaultsConfig {
                 branch_prefix: "..invalid".to_string(),
             },
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
@@ -765,6 +787,7 @@ root = "/loom"
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
@@ -803,6 +826,7 @@ root = "/loom"
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -852,6 +876,7 @@ root = "/loom"
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
@@ -901,6 +926,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -938,6 +964,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -969,6 +996,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1000,6 +1028,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1032,6 +1061,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1046,6 +1076,7 @@ enabled = ["claude-code"]
 
         // "plugin@" — empty marketplace name
         let config2 = Config {
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1061,6 +1092,7 @@ enabled = ["claude-code"]
 
         // "@" — both parts empty
         let config3 = Config {
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1088,6 +1120,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1115,6 +1148,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1149,6 +1183,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1213,6 +1248,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1244,6 +1280,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
@@ -1306,6 +1343,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1337,6 +1375,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1368,6 +1407,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1411,6 +1451,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1455,6 +1496,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig {
@@ -1561,6 +1603,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: Some(SpecsConfig {
                 path: "  ".to_string(),
@@ -1584,6 +1627,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: Some(SpecsConfig {
                 path: "../etc/passwd".to_string(),
@@ -1607,6 +1651,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: Some(SpecsConfig {
                 path: "/etc/passwd".to_string(),
@@ -1658,6 +1703,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos,
             specs: Some(SpecsConfig {
                 path: "pkm/01 - PROJECTS/Personal/LOOM/specs".to_string(),
@@ -1697,6 +1743,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos,
             specs: None,
             agents: AgentsConfig::default(),
@@ -1721,6 +1768,7 @@ enabled = ["claude-code"]
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
@@ -1735,5 +1783,222 @@ enabled = ["claude-code"]
             !toml_str.contains("[specs"),
             "None specs should be suppressed:\n{toml_str}"
         );
+    }
+
+    #[test]
+    fn test_groups_toml_round_trip() {
+        let mut groups = BTreeMap::new();
+        groups.insert(
+            "dsp-stack".to_string(),
+            vec![
+                "dsp-api".to_string(),
+                "dsp-das".to_string(),
+                "sipi".to_string(),
+            ],
+        );
+        groups.insert(
+            "infra".to_string(),
+            vec!["dsp-api".to_string(), "dsp-tools".to_string()],
+        );
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: groups.clone(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        assert!(toml_str.contains("[groups]"));
+        assert!(toml_str.contains("dsp-stack"));
+        assert!(toml_str.contains("infra"));
+
+        let parsed: Config = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed.groups, groups);
+    }
+
+    #[test]
+    fn test_groups_empty_suppressed_in_toml() {
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+        };
+
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        assert!(
+            !toml_str.contains("[groups"),
+            "Empty groups should be suppressed:\n{toml_str}"
+        );
+    }
+
+    #[test]
+    fn test_groups_missing_from_toml_defaults_to_empty() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(config.groups.is_empty());
+    }
+
+    #[test]
+    fn test_validate_groups_empty_group() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut groups = BTreeMap::new();
+        groups.insert("empty-group".to_string(), vec![]);
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups,
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("must contain at least one repo"));
+    }
+
+    #[test]
+    fn test_validate_groups_invalid_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut groups = BTreeMap::new();
+        groups.insert("UPPERCASE".to_string(), vec!["some-repo".to_string()]);
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups,
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("invalid group name"));
+    }
+
+    #[test]
+    fn test_validate_groups_duplicate_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut groups = BTreeMap::new();
+        groups.insert(
+            "dupes".to_string(),
+            vec!["repo-a".to_string(), "repo-a".to_string()],
+        );
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups,
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("duplicate entry"));
+    }
+
+    #[test]
+    fn test_validate_groups_empty_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut groups = BTreeMap::new();
+        groups.insert(
+            "has-empty".to_string(),
+            vec!["repo-a".to_string(), "  ".to_string()],
+        );
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups,
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+        };
+
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("empty or whitespace-only"));
+    }
+
+    #[test]
+    fn test_validate_groups_valid() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut groups = BTreeMap::new();
+        groups.insert(
+            "dsp-stack".to_string(),
+            vec!["dsp-api".to_string(), "sipi".to_string()],
+        );
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups,
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+        };
+
+        assert!(config.validate().is_ok());
     }
 }

@@ -41,6 +41,7 @@ pub fn create_test_config(scan_root: &Path, workspace_root: &Path) -> Config {
         sync: None,
         terminal: None,
         defaults: DefaultsConfig::default(),
+        groups: BTreeMap::new(),
         repos: BTreeMap::new(),
         specs: None,
         agents: AgentsConfig::default(),
