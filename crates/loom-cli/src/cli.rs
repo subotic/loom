@@ -605,7 +605,7 @@ impl Cli {
         repos_filter: Option<Vec<String>>,
         preset: Option<String>,
     ) -> anyhow::Result<()> {
-        use dialoguer::MultiSelect;
+        use dialoguer::{MultiSelect, Select};
         use loom_core::config::ensure_config_loaded;
         use loom_core::registry;
         use loom_core::workspace::new::{NewWorkspaceOpts, create_workspace};
@@ -665,24 +665,25 @@ impl Cli {
                 let mut orgs: Vec<String> = all_repos.iter().map(|r| r.org.clone()).collect();
                 orgs.dedup();
 
-                // Step 1: Select orgs (skip if only one)
-                let selected_orgs: Vec<String> = if orgs.len() == 1 {
-                    orgs
+                // Step 1: Select org (skip if only one)
+                let selected_org: String = if orgs.len() == 1 {
+                    orgs.into_iter().next().unwrap()
                 } else {
-                    let selections = MultiSelect::new()
-                        .with_prompt("Select org groups")
+                    let idx = Select::new()
+                        .with_prompt("Select organization")
                         .items(&orgs)
-                        .interact()?;
-                    if selections.is_empty() {
-                        anyhow::bail!("No org groups selected.");
+                        .default(0)
+                        .interact_opt()?;
+                    match idx {
+                        Some(i) => orgs[i].clone(),
+                        None => anyhow::bail!("Organization selection cancelled."),
                     }
-                    selections.into_iter().map(|i| orgs[i].clone()).collect()
                 };
 
-                // Step 2: Filter repos to selected orgs, then pick repos
+                // Step 2: Filter repos to selected org, then pick repos
                 let filtered: Vec<&loom_core::registry::RepoEntry> = all_repos
                     .iter()
-                    .filter(|r| selected_orgs.contains(&r.org))
+                    .filter(|r| r.org == selected_org)
                     .collect();
                 let labels: Vec<String> = filtered
                     .iter()
