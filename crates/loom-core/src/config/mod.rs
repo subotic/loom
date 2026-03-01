@@ -160,6 +160,7 @@ pub struct PermissionPreset {
 }
 
 impl PermissionPreset {
+    #[allow(dead_code)]
     pub(crate) fn is_empty(&self) -> bool {
         self.allowed_tools.is_empty() && self.sandbox.is_empty()
     }
@@ -237,9 +238,7 @@ fn validate_permission_entry(entry: &str, context: &str) -> Result<()> {
     if !trimmed.ends_with(')') || !trimmed.contains('(') {
         anyhow::bail!("{context}: invalid format '{trimmed}' — expected ToolName(specifier)");
     }
-    let (tool_name, _specifier) = trimmed
-        .split_once('(')
-        .expect("already checked for '('");
+    let (tool_name, _specifier) = trimmed.split_once('(').expect("already checked for '('");
     if !tool_name.starts_with("mcp__")
         && !tool_name
             .chars()
@@ -1028,7 +1027,10 @@ enabled = ["claude-code"]
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
         let parsed: Config = toml::from_str(&toml_str).unwrap();
-        assert_eq!(parsed.agents.claude_code.sandbox, config.agents.claude_code.sandbox);
+        assert_eq!(
+            parsed.agents.claude_code.sandbox,
+            config.agents.claude_code.sandbox
+        );
     }
 
     #[test]
@@ -1074,7 +1076,10 @@ enabled = ["claude-code"]
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
         let parsed: Config = toml::from_str(&toml_str).unwrap();
-        assert_eq!(parsed.agents.claude_code.presets, config.agents.claude_code.presets);
+        assert_eq!(
+            parsed.agents.claude_code.presets,
+            config.agents.claude_code.presets
+        );
     }
 
     #[test]
@@ -1113,7 +1118,10 @@ enabled = ["claude-code"]
             enabled: Some(true),
             ..Default::default()
         };
-        assert!(!sandbox.is_empty(), "sandbox with enabled=true should not be empty");
+        assert!(
+            !sandbox.is_empty(),
+            "sandbox with enabled=true should not be empty"
+        );
     }
 
     #[test]
@@ -1290,7 +1298,13 @@ enabled = ["claude-code"]
             parsed.agents.claude_code.allowed_tools,
             config.agents.claude_code.allowed_tools
         );
-        assert_eq!(parsed.agents.claude_code.sandbox, config.agents.claude_code.sandbox);
-        assert_eq!(parsed.agents.claude_code.presets, config.agents.claude_code.presets);
+        assert_eq!(
+            parsed.agents.claude_code.sandbox,
+            config.agents.claude_code.sandbox
+        );
+        assert_eq!(
+            parsed.agents.claude_code.presets,
+            config.agents.claude_code.presets
+        );
     }
 }

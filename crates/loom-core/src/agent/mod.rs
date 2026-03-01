@@ -35,20 +35,20 @@ pub fn generate_agent_files(
     manifest: &WorkspaceManifest,
 ) -> Result<()> {
     // Validate preset exists (stale preset check)
-    if let Some(ref preset_name) = manifest.preset {
-        if !config.agents.claude_code.presets.contains_key(preset_name) {
-            let available: Vec<&String> = config.agents.claude_code.presets.keys().collect();
-            anyhow::bail!(
-                "Preset '{}' referenced in workspace manifest not found in config.toml. \
-                 Available presets: [{}]. Update the manifest or add the preset to config.toml.",
-                preset_name,
-                available
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
+    if let Some(ref preset_name) = manifest.preset
+        && !config.agents.claude_code.presets.contains_key(preset_name)
+    {
+        let available: Vec<&String> = config.agents.claude_code.presets.keys().collect();
+        anyhow::bail!(
+            "Preset '{}' referenced in workspace manifest not found in config.toml. \
+             Available presets: [{}]. Update the manifest or add the preset to config.toml.",
+            preset_name,
+            available
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
 
     for agent_name in &config.agents.enabled {

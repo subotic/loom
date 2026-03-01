@@ -238,9 +238,7 @@ impl Cli {
 
         // Security flavor prompt (skip on re-init with existing agent config)
         let flavor = if existing_has_agent_config {
-            eprintln!(
-                "  Preserving existing Claude Code agent settings from config."
-            );
+            eprintln!("  Preserving existing Claude Code agent settings from config.");
             None
         } else {
             let items = [
@@ -708,8 +706,7 @@ impl Cli {
         let config = ensure_config_loaded()?;
         let cwd = std::env::current_dir()?;
 
-        let (ws_path, mut manifest) =
-            workspace::resolve_workspace(name.as_deref(), &cwd, &config)?;
+        let (ws_path, mut manifest) = workspace::resolve_workspace(name.as_deref(), &cwd, &config)?;
 
         // Update preset if --preset was provided
         if let Some(ref preset_value) = preset {
@@ -741,10 +738,7 @@ impl Cli {
                 manifest.preset = Some(preset_value.clone());
             }
             // Save updated manifest
-            manifest::write_manifest(
-                &ws_path.join(workspace::MANIFEST_FILENAME),
-                &manifest,
-            )?;
+            manifest::write_manifest(&ws_path.join(workspace::MANIFEST_FILENAME), &manifest)?;
         }
 
         generate_agent_files(&config, &ws_path, &manifest)?;

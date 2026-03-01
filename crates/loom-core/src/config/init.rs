@@ -75,10 +75,7 @@ pub fn build_claude_code_config(flavor: SecurityFlavor) -> ClaudeCodeConfig {
             ..Default::default()
         },
         SecurityFlavor::Permissions => ClaudeCodeConfig {
-            allowed_tools: vec![
-                "Bash(gh issue *)".to_string(),
-                "Bash(gh run *)".to_string(),
-            ],
+            allowed_tools: vec!["Bash(gh issue *)".to_string(), "Bash(gh run *)".to_string()],
             ..Default::default()
         },
         SecurityFlavor::Both => ClaudeCodeConfig {
@@ -102,15 +99,18 @@ pub fn build_claude_code_config(flavor: SecurityFlavor) -> ClaudeCodeConfig {
 /// Return commented-out preset examples for the given flavor.
 pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
     match flavor {
-        SecurityFlavor::Sandbox => "\
+        SecurityFlavor::Sandbox => {
+            "\
 \n# Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust.sandbox.filesystem]
 # allow_write = [\"~/.cargo\"]
 #
 # [agents.claude-code.presets.rust.sandbox.network]
 # allowed_domains = [\"docs.rs\", \"crates.io\"]
-",
-        SecurityFlavor::Permissions => "\
+"
+        }
+        SecurityFlavor::Permissions => {
+            "\
 \n# Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust]
 # allowed_tools = [
@@ -118,8 +118,10 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 #     \"Bash(cargo fmt *)\",
 #     \"Bash(cargo clippy *)\",
 # ]
-",
-        SecurityFlavor::Both => "\
+"
+        }
+        SecurityFlavor::Both => {
+            "\
 \n# Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust]
 # allowed_tools = []
@@ -129,8 +131,10 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 #
 # [agents.claude-code.presets.rust.sandbox.network]
 # allowed_domains = [\"docs.rs\", \"crates.io\"]
-",
-        SecurityFlavor::Skip => "\
+"
+        }
+        SecurityFlavor::Skip => {
+            "\
 \n# --- Claude Code agent settings ---
 # Choose a security flavor and uncomment the relevant sections.
 #
@@ -166,7 +170,8 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 #
 # [agents.claude-code.presets.rust.sandbox.network]
 # allowed_domains = [\"docs.rs\", \"crates.io\"]
-",
+"
+        }
     }
 }
 
@@ -221,9 +226,8 @@ pub fn save_init_config_to(config: &Config, flavor: SecurityFlavor, path: &Path)
 
     // Ensure parent directory exists
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).with_context(|| {
-            format!("Failed to create config directory {}", parent.display())
-        })?;
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create config directory {}", parent.display()))?;
     }
 
     // Atomic write
@@ -265,8 +269,7 @@ pub fn update_non_agent_config_at(config: &Config, path: &Path) -> Result<()> {
     doc["registry"]["scan_roots"] = toml_edit::value(scan_roots_array);
 
     // Update workspace.root
-    doc["workspace"]["root"] =
-        toml_edit::value(config.workspace.root.display().to_string());
+    doc["workspace"]["root"] = toml_edit::value(config.workspace.root.display().to_string());
 
     // Update terminal
     if let Some(ref terminal) = config.terminal {
@@ -606,10 +609,7 @@ auto_allow = true
         assert_eq!(cc.sandbox.enabled, Some(true));
         assert_eq!(cc.sandbox.auto_allow, Some(true));
         assert_eq!(cc.sandbox.excluded_commands, vec!["docker"]);
-        assert_eq!(
-            cc.sandbox.network.allowed_domains,
-            vec!["github.com"]
-        );
+        assert_eq!(cc.sandbox.network.allowed_domains, vec!["github.com"]);
         assert!(cc.allowed_tools.is_empty());
         assert!(cc.presets.is_empty());
     }
