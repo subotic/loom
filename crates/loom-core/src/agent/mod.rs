@@ -39,6 +39,15 @@ pub fn generate_agent_files(
         crate::config::validate_preset_exists(&config.agents.claude_code.presets, preset_name)?;
     }
 
+    // Warn about configured repo names that don't match any manifest entry
+    for repo_key in config.repos.keys() {
+        if !manifest.repos.iter().any(|r| r.name == *repo_key) {
+            eprintln!(
+                "Warning: [repos.{repo_key}] in config does not match any workspace repo, ignoring."
+            );
+        }
+    }
+
     for agent_name in &config.agents.enabled {
         let generator: Box<dyn AgentGenerator> = match agent_name.as_str() {
             "claude-code" => Box::new(claude_code::ClaudeCodeGenerator),
@@ -59,18 +68,10 @@ pub fn generate_agent_files(
         let files = generator.generate(manifest, config)?;
         for file in &files {
             // Guard against path traversal and absolute paths in relative_path
-            let rel = std::path::Path::new(&file.relative_path);
-            if rel.is_absolute()
-                || rel
-                    .components()
-                    .any(|c| c == std::path::Component::ParentDir)
-            {
-                anyhow::bail!(
-                    "Agent '{}' produced an invalid relative path: {}",
-                    agent_name,
-                    file.relative_path
-                );
-            }
+            crate::config::validate_no_path_traversal(
+                &file.relative_path,
+                &format!("agent '{agent_name}' relative path"),
+            )?;
             let full_path = ws_path.join(&file.relative_path);
             if let Some(parent) = full_path.parent() {
                 std::fs::create_dir_all(parent)?;
@@ -87,6 +88,7 @@ mod tests {
     use super::*;
     use crate::config::{AgentsConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
     use crate::manifest::RepoManifestEntry;
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     #[test]
@@ -103,6 +105,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig {
                 enabled: vec!["claude-code".to_string()],
                 ..Default::default()
@@ -146,6 +150,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig {
                 enabled: vec!["claude-code".to_string()],
                 ..Default::default()
@@ -182,6 +188,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig {
                 enabled: vec!["unknown-agent".to_string()],
                 ..Default::default()
@@ -239,6 +247,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig {
                 enabled: vec![],
                 ..Default::default()
