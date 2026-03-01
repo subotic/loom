@@ -14,6 +14,7 @@ pub struct WorkspaceSummary {
     pub repo_count: usize,
     pub status: WorkspaceHealth,
     pub created: chrono::DateTime<chrono::Utc>,
+    pub preset: Option<String>,
 }
 
 /// Health status of a workspace.
@@ -62,6 +63,7 @@ pub fn list_workspaces(config: &Config) -> Result<Vec<WorkspaceSummary>> {
                     repo_count: manifest.repos.len(),
                     status,
                     created: ws_index.created,
+                    preset: manifest.preset,
                 }
             }
             Err(e) => WorkspaceSummary {
@@ -70,6 +72,7 @@ pub fn list_workspaces(config: &Config) -> Result<Vec<WorkspaceSummary>> {
                 repo_count: ws_index.repo_count,
                 status: WorkspaceHealth::Broken(e.to_string()),
                 created: ws_index.created,
+                preset: None,
             },
         };
 

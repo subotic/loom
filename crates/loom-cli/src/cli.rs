@@ -43,7 +43,12 @@ pub enum Command {
         #[arg(long, value_delimiter = ',')]
         repos: Option<Vec<String>>,
         /// Permission preset name (from config.toml)
-        #[arg(long, value_name = "NAME")]
+        #[arg(
+            long,
+            value_name = "NAME",
+            long_help = "Apply a named permission preset defined in config.toml. \
+                           Presets bundle allowed_tools and sandbox settings per workspace."
+        )]
         preset: Option<String>,
     },
 
@@ -120,8 +125,13 @@ pub enum Command {
     Refresh {
         /// Workspace name (optional — detects from cwd if inside a workspace)
         name: Option<String>,
-        /// Update the workspace's permission preset (empty string to remove)
-        #[arg(long, value_name = "NAME")]
+        /// Update the workspace's permission preset
+        #[arg(
+            long,
+            value_name = "NAME",
+            long_help = "Set the permission preset for this workspace. \
+                           Pass an empty string (--preset \"\") to remove the current preset."
+        )]
         preset: Option<String>,
     },
 
@@ -162,10 +172,14 @@ impl Cli {
         // Check if config already exists
         let config_path = loom_core::config::Config::path()?;
         let is_reinit = config_path.exists();
-        let existing_has_agent_config = if is_reinit {
-            // Check if existing config has non-empty agent config
-            let existing_content = std::fs::read_to_string(&config_path)?;
-            match toml::from_str::<loom_core::config::Config>(&existing_content) {
+        // Read existing config content once for both agent detection and re-init preservation
+        let existing_content = if is_reinit {
+            Some(std::fs::read_to_string(&config_path)?)
+        } else {
+            None
+        };
+        let existing_has_agent_config = match &existing_content {
+            Some(content) => match toml::from_str::<loom_core::config::Config>(content) {
                 Ok(existing) => !existing.agents.claude_code.is_empty(),
                 Err(e) => {
                     eprintln!(
@@ -174,9 +188,8 @@ impl Cli {
                     );
                     false
                 }
-            }
-        } else {
-            false
+            },
+            None => false,
         };
 
         if is_reinit {
@@ -284,8 +297,8 @@ impl Cli {
 
         // Save config
         if is_reinit && existing_has_agent_config {
-            // Preserve agent section and comments using toml_edit
-            init::update_non_agent_config(&config)?;
+            // Preserve agent section and comments using toml_edit, reusing already-read content
+            init::update_non_agent_config_at(&config, &config_path, existing_content.as_deref())?;
         } else {
             // Fresh init or re-init without agent config: full save with preset comments
             let f = flavor.unwrap_or(SecurityFlavor::Skip);
@@ -312,17 +325,21 @@ impl Cli {
             return Ok(());
         }
 
-        println!("{:<20} {:<6} {:<12} CREATED", "NAME", "REPOS", "STATUS");
+        println!(
+            "{:<20} {:<6} {:<12} {:<12} CREATED",
+            "NAME", "REPOS", "STATUS", "PRESET"
+        );
         for ws in &summaries {
             let status_str = match &ws.status {
                 WorkspaceHealth::Clean => "clean".to_string(),
                 WorkspaceHealth::Dirty(n) => format!("{n} dirty"),
                 WorkspaceHealth::Broken(msg) => format!("broken: {msg}"),
             };
+            let preset_str = ws.preset.as_deref().unwrap_or("-");
             let date = ws.created.format("%Y-%m-%d");
             println!(
-                "{:<20} {:<6} {:<12} {}",
-                ws.name, ws.repo_count, status_str, date
+                "{:<20} {:<6} {:<12} {:<12} {}",
+                ws.name, ws.repo_count, status_str, preset_str, date
             );
         }
 

@@ -533,6 +533,8 @@ mod tests {
                 enabled: Some(true),
                 auto_allow: Some(true),
                 excluded_commands: vec!["docker".to_string()],
+                // Intentionally None — verifies that the key is omitted from JSON when unset,
+                // complementing the preset snapshot test which sets it to Some(false).
                 allow_unsandboxed_commands: None,
                 filesystem: SandboxFilesystemConfig {
                     allow_write: vec!["~/.config/loom".to_string()],

@@ -257,7 +257,12 @@ fn validate_permission_entry(entry: &str, context: &str) -> Result<()> {
     if !trimmed.ends_with(')') || !trimmed.contains('(') {
         anyhow::bail!("{context}: invalid format '{trimmed}' — expected ToolName(specifier)");
     }
-    let (tool_name, _specifier) = trimmed.split_once('(').expect("already checked for '('");
+    let paren_idx = trimmed.find('(').expect("already checked for '('");
+    let specifier = &trimmed[paren_idx + 1..trimmed.len() - 1];
+    if specifier.trim().is_empty() {
+        anyhow::bail!("{context}: specifier in '{trimmed}' cannot be empty");
+    }
+    let tool_name = &trimmed[..paren_idx];
     if !tool_name.starts_with("mcp__")
         && !tool_name
             .chars()
@@ -1158,6 +1163,9 @@ enabled = ["claude-code"]
         assert!(validate_permission_entry("   ", "test").is_err());
         assert!(validate_permission_entry("Bash", "test").is_err());
         assert!(validate_permission_entry("bash(cargo test *)", "test").is_err());
+        // Empty specifier
+        assert!(validate_permission_entry("Bash()", "test").is_err());
+        assert!(validate_permission_entry("Bash(  )", "test").is_err());
     }
 
     #[test]
