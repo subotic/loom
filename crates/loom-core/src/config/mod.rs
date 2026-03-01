@@ -1,6 +1,7 @@
 pub mod init;
 
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -159,13 +160,6 @@ pub struct PermissionPreset {
     pub sandbox: PresetSandboxConfig,
 }
 
-impl PermissionPreset {
-    #[allow(dead_code)]
-    pub(crate) fn is_empty(&self) -> bool {
-        self.allowed_tools.is_empty() && self.sandbox.is_empty()
-    }
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ClaudeCodeConfig {
@@ -229,6 +223,31 @@ fn default_branch_prefix() -> String {
     "loom".to_string()
 }
 
+/// Validate that a preset name exists in the config's preset map.
+///
+/// Returns `Ok(())` if the preset exists, or a descriptive error listing available presets.
+pub fn validate_preset_exists(
+    presets: &BTreeMap<String, PermissionPreset>,
+    preset_name: &str,
+) -> Result<()> {
+    if presets.contains_key(preset_name) {
+        return Ok(());
+    }
+    let available: Vec<&str> = presets.keys().map(|s| s.as_str()).collect();
+    if available.is_empty() {
+        anyhow::bail!(
+            "Preset '{}' not found. No presets defined in config.toml.",
+            preset_name
+        );
+    } else {
+        anyhow::bail!(
+            "Preset '{}' not found. Available presets: {}",
+            preset_name,
+            available.join(", ")
+        );
+    }
+}
+
 /// Validate a Claude Code permission entry has the form `ToolName(specifier)`.
 fn validate_permission_entry(entry: &str, context: &str) -> Result<()> {
     let trimmed = entry.trim();
@@ -270,6 +289,31 @@ fn validate_no_duplicates(entries: &[String], context: &str) -> Result<()> {
             anyhow::bail!("{context}: duplicate entry '{entry}'");
         }
     }
+    Ok(())
+}
+
+/// Validate sandbox filesystem and network entries for a given context prefix.
+fn validate_sandbox_entries(
+    fs: &SandboxFilesystemConfig,
+    net: &SandboxNetworkConfig,
+    context: &str,
+) -> Result<()> {
+    validate_no_empty_entries(
+        &fs.allow_write,
+        &format!("{context}.sandbox.filesystem.allow_write"),
+    )?;
+    validate_no_empty_entries(
+        &fs.deny_write,
+        &format!("{context}.sandbox.filesystem.deny_write"),
+    )?;
+    validate_no_empty_entries(
+        &fs.deny_read,
+        &format!("{context}.sandbox.filesystem.deny_read"),
+    )?;
+    validate_no_empty_entries(
+        &net.allowed_domains,
+        &format!("{context}.sandbox.network.allowed_domains"),
+    )?;
     Ok(())
 }
 
@@ -322,10 +366,10 @@ impl Config {
 
         // Atomic write: create temp file in same dir, write, then persist (rename)
         let parent = path.parent().unwrap_or(Path::new("."));
-        let tmp = tempfile::NamedTempFile::new_in(parent)
+        let mut tmp = tempfile::NamedTempFile::new_in(parent)
             .with_context(|| format!("Failed to create temp file in {}", parent.display()))?;
-        std::fs::write(tmp.path(), content.as_bytes())
-            .with_context(|| "Failed to write config to temp file".to_string())?;
+        tmp.write_all(content.as_bytes())
+            .with_context(|| "Failed to write config to temp file")?;
         tmp.persist(path)
             .with_context(|| format!("Failed to persist config to {}", path.display()))?;
 
@@ -368,6 +412,35 @@ impl Config {
         if let Some(sync) = &mut self.sync {
             sync.repo = expand_path(&sync.repo);
         }
+    }
+
+    /// Validate only the agent config section (no path-existence checks).
+    ///
+    /// Use this during `loom init` where paths may not exist yet.
+    pub fn validate_agent_config(&self) -> Result<()> {
+        let cc = &self.agents.claude_code;
+        for entry in &cc.allowed_tools {
+            validate_permission_entry(entry, "agents.claude-code.allowed_tools")?;
+        }
+        validate_no_duplicates(&cc.allowed_tools, "agents.claude-code.allowed_tools")?;
+        validate_sandbox_entries(
+            &cc.sandbox.filesystem,
+            &cc.sandbox.network,
+            "agents.claude-code",
+        )?;
+        validate_no_empty_entries(
+            &cc.sandbox.excluded_commands,
+            "agents.claude-code.sandbox.excluded_commands",
+        )?;
+        for (name, preset) in &cc.presets {
+            let ctx = format!("agents.claude-code.presets.{name}");
+            for entry in &preset.allowed_tools {
+                validate_permission_entry(entry, &format!("{ctx}.allowed_tools"))?;
+            }
+            validate_no_duplicates(&preset.allowed_tools, &format!("{ctx}.allowed_tools"))?;
+            validate_sandbox_entries(&preset.sandbox.filesystem, &preset.sandbox.network, &ctx)?;
+        }
+        Ok(())
     }
 
     /// Validate the loaded config
@@ -448,59 +521,8 @@ impl Config {
             }
         }
 
-        // Validate allowed_tools permission entries
-        let cc = &self.agents.claude_code;
-        for entry in &cc.allowed_tools {
-            validate_permission_entry(entry, "agents.claude-code.allowed_tools")?;
-        }
-        validate_no_duplicates(&cc.allowed_tools, "agents.claude-code.allowed_tools")?;
-
-        // Validate sandbox path entries
-        validate_no_empty_entries(
-            &cc.sandbox.filesystem.allow_write,
-            "agents.claude-code.sandbox.filesystem.allow_write",
-        )?;
-        validate_no_empty_entries(
-            &cc.sandbox.filesystem.deny_write,
-            "agents.claude-code.sandbox.filesystem.deny_write",
-        )?;
-        validate_no_empty_entries(
-            &cc.sandbox.filesystem.deny_read,
-            "agents.claude-code.sandbox.filesystem.deny_read",
-        )?;
-        validate_no_empty_entries(
-            &cc.sandbox.network.allowed_domains,
-            "agents.claude-code.sandbox.network.allowed_domains",
-        )?;
-        validate_no_empty_entries(
-            &cc.sandbox.excluded_commands,
-            "agents.claude-code.sandbox.excluded_commands",
-        )?;
-
-        // Validate presets
-        for (name, preset) in &cc.presets {
-            let ctx = format!("agents.claude-code.presets.{name}");
-            for entry in &preset.allowed_tools {
-                validate_permission_entry(entry, &format!("{ctx}.allowed_tools"))?;
-            }
-            validate_no_duplicates(&preset.allowed_tools, &format!("{ctx}.allowed_tools"))?;
-            validate_no_empty_entries(
-                &preset.sandbox.filesystem.allow_write,
-                &format!("{ctx}.sandbox.filesystem.allow_write"),
-            )?;
-            validate_no_empty_entries(
-                &preset.sandbox.filesystem.deny_write,
-                &format!("{ctx}.sandbox.filesystem.deny_write"),
-            )?;
-            validate_no_empty_entries(
-                &preset.sandbox.filesystem.deny_read,
-                &format!("{ctx}.sandbox.filesystem.deny_read"),
-            )?;
-            validate_no_empty_entries(
-                &preset.sandbox.network.allowed_domains,
-                &format!("{ctx}.sandbox.network.allowed_domains"),
-            )?;
-        }
+        // Validate agent config (permissions, sandbox, presets)
+        self.validate_agent_config()?;
 
         Ok(())
     }

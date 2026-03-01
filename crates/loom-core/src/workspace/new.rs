@@ -47,26 +47,8 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
     }
 
     // Validate preset exists in config (if provided)
-    if let Some(ref preset_name) = opts.preset
-        && !config.agents.claude_code.presets.contains_key(preset_name)
-    {
-        let available: Vec<&String> = config.agents.claude_code.presets.keys().collect();
-        if available.is_empty() {
-            anyhow::bail!(
-                "Preset '{}' not found. No presets defined in config.toml.",
-                preset_name
-            );
-        } else {
-            anyhow::bail!(
-                "Preset '{}' not found. Available presets: {}",
-                preset_name,
-                available
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
+    if let Some(ref preset_name) = opts.preset {
+        crate::config::validate_preset_exists(&config.agents.claude_code.presets, preset_name)?;
     }
 
     // If --base is set, fetch and validate all repos have the ref
