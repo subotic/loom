@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceManifest {
     pub name: String,
+    /// Stored branch name (e.g., `loom/bold-cedar-hawk`).
+    /// `None` for workspaces created before random branch naming was introduced;
+    /// in that case `branch_name()` falls back to `{prefix}/{name}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
     pub created: DateTime<Utc>,
@@ -20,8 +23,11 @@ pub struct WorkspaceManifest {
 }
 
 impl WorkspaceManifest {
-    /// Returns the workspace branch name, falling back to `{prefix}/{name}`
-    /// for manifests created before random branch naming was introduced.
+    /// Returns the workspace branch name.
+    ///
+    /// If `branch` is `Some`, returns it directly (the `branch_prefix` argument
+    /// is unused in that case). Falls back to `{branch_prefix}/{name}` for
+    /// manifests created before random branch naming was introduced.
     pub fn branch_name(&self, branch_prefix: &str) -> String {
         self.branch
             .clone()

@@ -20,6 +20,11 @@ pub struct SyncManifest {
     pub created: DateTime<Utc>,
     #[serde(default = "default_sync_status")]
     pub status: SyncStatus,
+    /// The workspace branch name (e.g., `loom/bold-cedar-hawk`).
+    /// Added after random branch naming was introduced; older manifests
+    /// won't have this field, so it defaults to `None` for backward compatibility.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
     #[serde(default)]
     pub repos: Vec<SyncRepoEntry>,
 }
@@ -47,6 +52,7 @@ mod tests {
             name: "my-feature".to_string(),
             created: Utc::now(),
             status: SyncStatus::Active,
+            branch: Some("loom/bold-cedar-hawk".to_string()),
             repos: vec![SyncRepoEntry {
                 name: "dsp-api".to_string(),
                 remote_url: "git@github.com:dasch-swiss/dsp-api.git".to_string(),
@@ -59,6 +65,7 @@ mod tests {
 
         assert_eq!(parsed.name, "my-feature");
         assert_eq!(parsed.status, SyncStatus::Active);
+        assert_eq!(parsed.branch, Some("loom/bold-cedar-hawk".to_string()));
         assert_eq!(parsed.repos.len(), 1);
     }
 
@@ -87,6 +94,7 @@ mod tests {
 
         let manifest: SyncManifest = serde_json::from_str(json).unwrap();
         assert_eq!(manifest.status, SyncStatus::Active);
+        assert!(manifest.branch.is_none());
         assert!(manifest.repos.is_empty());
     }
 }

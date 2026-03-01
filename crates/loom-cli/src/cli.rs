@@ -618,7 +618,7 @@ impl Cli {
             None => {
                 let generated = loom_core::names::generate_unique_workspace_name(
                     &config.workspace.root,
-                    10,
+                    loom_core::names::MAX_NAME_RETRIES,
                 )?;
                 println!("Generated workspace name: {generated}");
                 generated
