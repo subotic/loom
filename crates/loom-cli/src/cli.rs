@@ -300,8 +300,9 @@ impl Cli {
             // Preserve agent section and comments using toml_edit, reusing already-read content
             init::update_non_agent_config_at(&config, &config_path, existing_content.as_deref())?;
         } else {
-            // Fresh init or re-init without agent config: full save with preset comments
-            let f = flavor.unwrap_or(SecurityFlavor::Skip);
+            // Fresh init or re-init without agent config: full save with preset comments.
+            // flavor is always Some here — None only when existing_has_agent_config (if branch).
+            let f = flavor.expect("flavor is always set for fresh init or agent-less re-init");
             init::save_init_config(&config, f)?;
         }
 
@@ -326,7 +327,7 @@ impl Cli {
         }
 
         println!(
-            "{:<20} {:<6} {:<12} {:<12} CREATED",
+            "{:<20} {:<6} {:<12} {:<20} CREATED",
             "NAME", "REPOS", "STATUS", "PRESET"
         );
         for ws in &summaries {
@@ -338,7 +339,7 @@ impl Cli {
             let preset_str = ws.preset.as_deref().unwrap_or("-");
             let date = ws.created.format("%Y-%m-%d");
             println!(
-                "{:<20} {:<6} {:<12} {:<12} {}",
+                "{:<20} {:<6} {:<12} {:<20} {}",
                 ws.name, ws.repo_count, status_str, preset_str, date
             );
         }

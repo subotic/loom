@@ -202,7 +202,10 @@ fn generate_settings(
         obj["enabledPlugins"] = serde_json::Value::Object(plugins);
     }
 
-    // Resolve the preset (if any)
+    // Resolve the preset (if any). Upstream callers (generate_agent_files,
+    // create_workspace, run_refresh) validate the preset exists via
+    // validate_preset_exists() before reaching here. A miss falls back to
+    // global-only settings, which is safe but should not happen in practice.
     let preset = preset_name.and_then(|name| cc_config.presets.get(name));
 
     // Build permissions.allow from global + preset allowed_tools
