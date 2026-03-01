@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod config;
 pub mod git;
+pub mod groups;
 pub mod manifest;
 pub mod names;
 pub mod registry;
