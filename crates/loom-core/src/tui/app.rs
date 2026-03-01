@@ -384,21 +384,35 @@ impl App {
                         selected,
                         focused,
                     } => {
-                        if name.is_empty() {
-                            self.set_status(
-                                "Workspace name cannot be empty".to_string(),
-                                StatusLevel::Error,
-                            );
-                            self.screen = Screen::NewWizard {
-                                step: WizardStep::EnterName,
-                                name,
-                                available_repos,
-                                groups,
-                                selected_groups,
-                                selected,
-                                focused,
-                            };
-                        } else if groups.len() <= 1 {
+                        // Generate random name if empty
+                        let name = if name.is_empty() {
+                            match crate::names::generate_unique_workspace_name(
+                                &self.config.workspace.root,
+                                10,
+                            ) {
+                                Ok(generated) => generated,
+                                Err(e) => {
+                                    self.set_status(
+                                        format!("Failed to generate name: {e}"),
+                                        StatusLevel::Error,
+                                    );
+                                    self.screen = Screen::NewWizard {
+                                        step: WizardStep::EnterName,
+                                        name,
+                                        available_repos,
+                                        groups,
+                                        selected_groups,
+                                        selected,
+                                        focused,
+                                    };
+                                    return;
+                                }
+                            }
+                        } else {
+                            name
+                        };
+
+                        if groups.len() <= 1 {
                             // Only one org — skip group selection, auto-select it
                             let all_selected: HashSet<usize> = (0..groups.len()).collect();
                             self.screen = Screen::NewWizard {
@@ -804,7 +818,7 @@ mod tests {
     }
 
     #[test]
-    fn test_wizard_rejects_empty_name() {
+    fn test_wizard_generates_random_name_when_empty() {
         let dir = tempfile::tempdir().unwrap();
         let config = test_config(dir.path());
         let mut app = App::new(config);
@@ -821,15 +835,15 @@ mod tests {
 
         app.update(Message::WizardNextStep);
 
-        // Should stay on EnterName with an error status
-        assert!(matches!(
-            &app.screen,
-            Screen::NewWizard {
-                step: WizardStep::EnterName,
-                ..
-            }
-        ));
-        assert!(app.status.is_some());
+        // With no groups, should advance to SelectRepos with a generated name
+        if let Screen::NewWizard { name, step, .. } = &app.screen {
+            assert!(!name.is_empty(), "Name should be generated");
+            assert_eq!(name.split('-').count(), 3, "Name should be adj-mod-noun");
+            // With 0 groups, the wizard skips to SelectRepos
+            assert_eq!(*step, WizardStep::SelectRepos);
+        } else {
+            panic!("Expected NewWizard screen");
+        }
     }
 
     #[test]
