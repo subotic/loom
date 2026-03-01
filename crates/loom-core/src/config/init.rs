@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use std::io::Write;
@@ -207,6 +208,8 @@ pub fn create_config(
         sync: None,
         terminal: terminal.map(|command| TerminalConfig { command }),
         defaults: DefaultsConfig { branch_prefix },
+        repos: BTreeMap::new(),
+        specs: None,
         agents: AgentsConfig {
             enabled: agents,
             claude_code,
@@ -224,6 +227,19 @@ pub fn save_init_config(config: &Config, flavor: SecurityFlavor) -> Result<()> {
     save_init_config_to(config, flavor, &path)
 }
 
+/// Comment block for repos and specs — appended to all configs regardless of security flavor.
+pub(crate) fn repos_specs_comment_block() -> &'static str {
+    "\
+\n# Per-repo settings — configure push workflow per repo
+# [repos.my-repo]
+# workflow = \"pr\"    # \"pr\" (default) or \"push\"
+#
+# Specs directory for PRDs and implementation plans
+# [specs]
+# path = \"path/to/specs\"
+"
+}
+
 /// Save config to a specific path with commented preset examples appended.
 pub fn save_init_config_to(config: &Config, flavor: SecurityFlavor, path: &Path) -> Result<()> {
     // Validate agent config before writing (defense in depth)
@@ -233,6 +249,7 @@ pub fn save_init_config_to(config: &Config, flavor: SecurityFlavor, path: &Path)
         toml::to_string_pretty(config).context("Failed to serialize config to TOML")?;
 
     content.push_str(preset_comment_block(flavor));
+    content.push_str(repos_specs_comment_block());
 
     // Ensure parent directory exists
     if let Some(parent) = path.parent() {
@@ -498,6 +515,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig {
                 enabled: vec!["claude-code".to_string()],
                 claude_code: build_claude_code_config(SecurityFlavor::Sandbox),
@@ -528,6 +547,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         };
 
@@ -582,6 +603,8 @@ auto_allow = true
             defaults: DefaultsConfig {
                 branch_prefix: "dev".to_string(),
             },
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(), // Doesn't matter — agents section is preserved
         };
 
@@ -619,6 +642,8 @@ auto_allow = true
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         };
 
@@ -679,5 +704,101 @@ auto_allow = true
                 "{flavor:?} should contain comment markers"
             );
         }
+    }
+
+    #[test]
+    fn test_save_init_config_includes_repos_specs_comments() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/workspaces"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+        };
+
+        save_init_config_to(&config, SecurityFlavor::Sandbox, &config_path).unwrap();
+
+        let content = std::fs::read_to_string(&config_path).unwrap();
+        assert!(content.contains("# [repos.my-repo]"));
+        assert!(content.contains("# workflow = \"pr\""));
+        assert!(content.contains("# [specs]"));
+        assert!(content.contains("# path = \"path/to/specs\""));
+    }
+
+    #[test]
+    fn test_update_non_agent_config_preserves_repos_and_specs() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+
+        let initial = r#"[registry]
+scan_roots = ["/old/code"]
+
+[workspace]
+root = "/old/workspaces"
+
+[defaults]
+branch_prefix = "loom"
+
+[repos.my-repo]
+workflow = "push"
+
+[specs]
+path = "docs/specs"
+
+[agents]
+enabled = ["claude-code"]
+"#;
+        std::fs::write(&config_path, initial).unwrap();
+
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/new/code")],
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/new/workspaces"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+        };
+
+        update_non_agent_config_at(&config, &config_path, None).unwrap();
+
+        let content = std::fs::read_to_string(&config_path).unwrap();
+
+        // Non-agent sections are updated
+        assert!(content.contains("/new/code"));
+        assert!(content.contains("/new/workspaces"));
+
+        // repos and specs sections are preserved
+        assert!(
+            content.contains("[repos.my-repo]"),
+            "repos section should be preserved during re-init"
+        );
+        assert!(
+            content.contains("workflow = \"push\""),
+            "workflow value should be preserved"
+        );
+        assert!(
+            content.contains("[specs]"),
+            "specs section should be preserved during re-init"
+        );
+        assert!(
+            content.contains("docs/specs"),
+            "specs path should be preserved"
+        );
     }
 }
