@@ -124,13 +124,11 @@ $ loom init
 
 ```
 $ loom new
-✓ Created workspace: amber-swift-fox
+Workspace 'amber-swift-fox' created at /Users/you/workspaces/amber-swift-fox
   Branch: loom/gentle-river-stone
-  Path: /Users/you/workspaces/amber-swift-fox
+  2 repo(s) added
 
-  Repos:
-    dsp-api  → /Users/you/workspaces/amber-swift-fox/dsp-api
-    dsp-das  → /Users/you/workspaces/amber-swift-fox/dsp-das
+  Hint: If using Claude Code, restart it in this workspace to pick up the new repos.
 ```
 
 Omitting the name generates a random `adjective-modifier-noun` name. The branch name is independently generated (also random) and prefixed with your `branch_prefix` (default: `loom/`).
@@ -141,11 +139,12 @@ Omitting the name generates a random `adjective-modifier-noun` name. The branch 
 $ loom status amber-swift-fox
 Workspace: amber-swift-fox
 Path: /Users/you/workspaces/amber-swift-fox
-Repos: 2
 
-REPO       BRANCH                    STATUS  AHEAD  BEHIND
-dsp-api    loom/gentle-river-stone   clean   0      0
-dsp-das    loom/gentle-river-stone   clean   0      0
+  REPO                 BRANCH                    STATUS     AHEAD/BEHIND
+  dsp-api              loom/gentle-river-stone   clean      -
+  dsp-das              loom/gentle-river-stone   clean      -
+
+  (ahead/behind based on last fetch — use --fetch for current data)
 ```
 
 #### Step 3: Run a command across repos
@@ -153,10 +152,10 @@ dsp-das    loom/gentle-river-stone   clean   0      0
 ```
 $ cd ~/workspaces/amber-swift-fox
 $ loom exec git log --oneline -1
-── dsp-api ──
+=== dsp-api ===
 a1b2c3d Initial commit
 
-── dsp-das ──
+=== dsp-das ===
 d4e5f6a Initial commit
 ```
 
@@ -164,8 +163,8 @@ d4e5f6a Initial commit
 
 ```
 $ loom save
+Saving workspace 'amber-swift-fox'...
 Pushed: dsp-api, dsp-das
-Sync: updated amber-swift-fox manifest
 ```
 
 `loom save` pushes the workspace branch for each repo to its remote. If `[sync]` is configured, it also writes a sync manifest for cross-machine restore.
@@ -175,11 +174,9 @@ Sync: updated amber-swift-fox manifest
 ```
 $ cd ~
 $ loom down amber-swift-fox
-✓ Removed worktree: dsp-api
-✓ Removed worktree: dsp-das
-✓ Deleted branch: loom/gentle-river-stone (dsp-api)
-✓ Deleted branch: loom/gentle-river-stone (dsp-das)
-✓ Workspace amber-swift-fox torn down
+Clean repos (will remove): dsp-api, dsp-das
+Removed 2 repo(s).
+Workspace 'amber-swift-fox' torn down.
 ```
 
 > **Tip:** Don't run `loom down` from inside the workspace directory — your current directory becomes invalid after teardown.
@@ -243,13 +240,11 @@ loom new [NAME] [--base BRANCH] [--repos REPO,...] [--groups GROUP,...] [--prese
 
 ```
 $ loom new my-feature --repos dsp-api,dsp-das
-✓ Created workspace: my-feature
+Workspace 'my-feature' created at /Users/you/workspaces/my-feature
   Branch: loom/bold-cedar-hawk
-  Path: /Users/you/workspaces/my-feature
+  2 repo(s) added
 
-  Repos:
-    dsp-api  → /Users/you/workspaces/my-feature/dsp-api
-    dsp-das  → /Users/you/workspaces/my-feature/dsp-das
+  Hint: If using Claude Code, restart it in this workspace to pick up the new repos.
 ```
 
 ```
@@ -258,7 +253,7 @@ $ loom new my-feature --groups backend
 
 ```
 $ loom new --preset rust
-✓ Created workspace: amber-swift-fox
+Workspace 'amber-swift-fox' created at /Users/you/workspaces/amber-swift-fox
   Branch: loom/gentle-river-stone
   ...
 ```
@@ -350,12 +345,11 @@ loom status [NAME] [--fetch]
 $ loom status
 Workspace: my-feature
 Path: /Users/you/workspaces/my-feature
-Repos: 3
 
-REPO       BRANCH                    STATUS  AHEAD  BEHIND
-dsp-api    loom/bold-cedar-hawk      clean   0      0
-dsp-das    loom/bold-cedar-hawk      clean   2      0
-ops-deploy loom/bold-cedar-hawk      dirty   1      3
+  REPO                 BRANCH                    STATUS     AHEAD/BEHIND
+  dsp-api              loom/bold-cedar-hawk      clean      -
+  dsp-das              loom/bold-cedar-hawk      clean      +2 -0
+  ops-deploy           loom/bold-cedar-hawk      1 changed  +1 -3
 ```
 
 **Notes:**
@@ -380,9 +374,9 @@ loom save [--force]
 
 ```
 $ loom save
+Saving workspace 'my-feature'...
 Pushed: dsp-api, dsp-das
 Skipped (dirty): ops-deploy (use --force to push anyway)
-Sync: updated my-feature manifest
 ```
 
 **Important:**
@@ -435,12 +429,12 @@ loom down [NAME] [--force]
 
 ```
 $ loom down my-feature
-? Workspace has dirty repos. Remove them too? (y/n) y
-✓ Removed worktree: dsp-api
-✓ Removed worktree: dsp-das
-✓ Deleted branch: loom/bold-cedar-hawk (dsp-api)
-✓ Deleted branch: loom/bold-cedar-hawk (dsp-das)
-✓ Workspace my-feature torn down
+Clean repos (will remove): dsp-api, dsp-das
+Dirty repos:
+  ops-deploy (1 changes)
+Remove dirty repos too? (uncommitted changes will be lost) (y/n) y
+Removed 3 repo(s).
+Workspace 'my-feature' torn down.
 ```
 
 **Notes:**
@@ -466,10 +460,10 @@ loom exec <CMD>...
 
 ```
 $ loom exec git log --oneline -1
-── dsp-api ──
+=== dsp-api ===
 a1b2c3d Add metadata validation
 
-── dsp-das ──
+=== dsp-das ===
 d4e5f6a Update component tests
 ```
 
