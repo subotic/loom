@@ -145,6 +145,7 @@ mod tests {
     use super::*;
     use crate::config::{AgentsConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
     use crate::manifest::RepoManifestEntry;
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     fn test_config(dir: &Path) -> Config {
@@ -156,6 +157,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         }
     }

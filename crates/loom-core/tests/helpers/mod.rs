@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use loom_core::config::{AgentsConfig, Config, DefaultsConfig, RegistryConfig, WorkspaceConfig};
@@ -40,6 +41,8 @@ pub fn create_test_config(scan_root: &Path, workspace_root: &Path) -> Config {
         sync: None,
         terminal: None,
         defaults: DefaultsConfig::default(),
+        repos: BTreeMap::new(),
+        specs: None,
         agents: AgentsConfig::default(),
     }
 }

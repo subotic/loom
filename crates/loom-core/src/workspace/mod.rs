@@ -71,6 +71,7 @@ pub fn resolve_workspace(
 mod tests {
     use super::*;
     use crate::manifest::{WorkspaceManifest, write_manifest};
+    use std::collections::BTreeMap;
 
     fn create_test_workspace(root: &Path, name: &str) -> PathBuf {
         let ws_path = root.join(name);
@@ -134,6 +135,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: crate::config::DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: crate::config::AgentsConfig::default(),
         };
 
@@ -154,6 +157,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: crate::config::DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: crate::config::AgentsConfig::default(),
         };
 
@@ -175,6 +180,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: crate::config::DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: crate::config::AgentsConfig::default(),
         };
 

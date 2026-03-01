@@ -135,6 +135,7 @@ mod tests {
     use super::*;
     use crate::config::{AgentsConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
     use crate::manifest::{RepoManifestEntry, WorkspaceIndex};
+    use std::collections::BTreeMap;
 
     fn test_config(dir: &Path) -> Config {
         let ws_root = dir.join("loom");
@@ -145,6 +146,8 @@ mod tests {
             sync: None,
             terminal: None,
             defaults: DefaultsConfig::default(),
+            repos: BTreeMap::new(),
+            specs: None,
             agents: AgentsConfig::default(),
         }
     }
