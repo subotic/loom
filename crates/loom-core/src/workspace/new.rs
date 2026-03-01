@@ -13,6 +13,7 @@ use crate::registry::RepoEntry;
 pub struct NewWorkspaceResult {
     pub path: PathBuf,
     pub name: String,
+    pub branch: String,
     pub repos_added: usize,
     pub repos_failed: Vec<(String, String)>, // (name, error message)
 }
@@ -92,6 +93,10 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
     let branch_prefix = &config.defaults.branch_prefix;
     let now = Utc::now();
 
+    // Generate a random branch name that doesn't collide with existing refs
+    let repo_paths: Vec<PathBuf> = opts.repos.iter().map(|r| r.path.clone()).collect();
+    let branch_name = crate::names::generate_unique_branch_name(branch_prefix, &repo_paths, 10)?;
+
     // Write state.json FIRST (with 0 repos) — Ctrl+C safety
     let state_path = config.workspace.root.join(".loom").join("state.json");
     let mut state = manifest::read_global_state(&state_path);
@@ -106,7 +111,7 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
     // Initialize workspace manifest
     let mut ws_manifest = WorkspaceManifest {
         name: opts.name.clone(),
-        branch: None, // Set after branch generation in the repo loop
+        branch: Some(branch_name.clone()),
         created: now,
         base_branch: opts.base_branch.clone(),
         preset: opts.preset.clone(),
@@ -118,7 +123,7 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
 
     // Process each repo
     for repo in &opts.repos {
-        let branch_name = format!("{}/{}", branch_prefix, opts.name);
+        let branch_name = branch_name.clone();
 
         match add_repo_to_workspace(
             &ws_path,
@@ -158,6 +163,7 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
     Ok(NewWorkspaceResult {
         path: ws_path,
         name: opts.name,
+        branch: branch_name,
         repos_added,
         repos_failed,
     })
