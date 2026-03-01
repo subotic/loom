@@ -34,8 +34,8 @@ pub enum Command {
 
     /// Create a new workspace with correlated worktrees
     New {
-        /// Workspace name (lowercase alphanumeric + hyphens)
-        name: String,
+        /// Workspace name (optional — random name generated if omitted)
+        name: Option<String>,
         /// Base branch for worktrees (default: repo default branch)
         #[arg(long)]
         base: Option<String>,
@@ -601,7 +601,7 @@ impl Cli {
     }
 
     fn run_new(
-        name: String,
+        name: Option<String>,
         base: Option<String>,
         repos_filter: Option<Vec<String>>,
         preset: Option<String>,
@@ -612,6 +612,19 @@ impl Cli {
         use loom_core::workspace::new::{NewWorkspaceOpts, create_workspace};
 
         let config = ensure_config_loaded()?;
+
+        // Generate or use provided name
+        let name = match name {
+            Some(n) => n,
+            None => {
+                let generated = loom_core::names::generate_unique_workspace_name(
+                    &config.workspace.root,
+                    10,
+                )?;
+                println!("Generated workspace name: {generated}");
+                generated
+            }
+        };
 
         // Discover all repos
         let all_repos =
@@ -706,6 +719,7 @@ impl Cli {
             result.name,
             result.path.display()
         );
+        println!("  Branch: {}", result.branch);
         println!("  {} repo(s) added", result.repos_added);
 
         if !result.repos_failed.is_empty() {
