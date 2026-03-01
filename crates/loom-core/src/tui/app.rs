@@ -242,90 +242,78 @@ impl App {
                 }
                 _ => {}
             },
-            Message::Cancel => match &self.screen {
-                Screen::WorkspaceDetail { .. } => {
-                    self.screen = Screen::WorkspaceList;
-                    self.refresh_workspaces();
-                }
-                Screen::NewWizard {
-                    step: WizardStep::EnterName,
-                    ..
-                } => {
-                    self.screen = Screen::WorkspaceList;
-                }
-                Screen::NewWizard {
-                    step: WizardStep::SelectGroups,
-                    name,
-                    available_repos,
-                    groups,
-                    ..
-                } => {
-                    let name = name.clone();
-                    let repos = available_repos.clone();
-                    let groups = groups.clone();
-                    self.screen = Screen::NewWizard {
+            Message::Cancel => {
+                let screen = std::mem::replace(&mut self.screen, Screen::WorkspaceList);
+                match screen {
+                    Screen::WorkspaceDetail { .. } => {
+                        self.refresh_workspaces();
+                    }
+                    Screen::NewWizard {
                         step: WizardStep::EnterName,
-                        name,
-                        available_repos: repos,
-                        groups,
-                        selected_group: 0,
-                        selected: HashSet::new(),
-                        focused: 0,
-                    };
-                }
-                Screen::NewWizard {
-                    step: WizardStep::SelectRepos,
-                    name,
-                    available_repos,
-                    groups,
-                    selected_group,
-                    ..
-                } => {
-                    let name = name.clone();
-                    let repos = available_repos.clone();
-                    let groups = groups.clone();
-                    let prev_group = *selected_group;
-                    self.screen = Screen::NewWizard {
+                        ..
+                    } => {
+                        // Already replaced with WorkspaceList
+                    }
+                    Screen::NewWizard {
                         step: WizardStep::SelectGroups,
                         name,
-                        available_repos: repos,
+                        available_repos,
                         groups,
-                        selected_group: 0,
-                        selected: HashSet::new(),
-                        focused: prev_group, // pre-focus the previously selected org
-                    };
-                }
-                Screen::NewWizard {
-                    step: WizardStep::Confirm,
-                    name,
-                    available_repos,
-                    groups,
-                    selected_group,
-                    selected,
-                    focused,
-                    ..
-                } => {
-                    let name = name.clone();
-                    let repos = available_repos.clone();
-                    let groups = groups.clone();
-                    let sel = selected.clone();
-                    let foc = *focused;
-                    self.screen = Screen::NewWizard {
+                        ..
+                    } => {
+                        self.screen = Screen::NewWizard {
+                            step: WizardStep::EnterName,
+                            name,
+                            available_repos,
+                            groups,
+                            selected_group: 0,
+                            selected: HashSet::new(),
+                            focused: 0,
+                        };
+                    }
+                    Screen::NewWizard {
                         step: WizardStep::SelectRepos,
                         name,
-                        available_repos: repos,
+                        available_repos,
                         groups,
-                        selected_group: *selected_group,
-                        selected: sel,
-                        focused: foc,
-                    };
+                        selected_group,
+                        ..
+                    } => {
+                        self.screen = Screen::NewWizard {
+                            step: WizardStep::SelectGroups,
+                            name,
+                            available_repos,
+                            groups,
+                            selected_group: 0,
+                            selected: HashSet::new(),
+                            focused: selected_group, // pre-focus the previously selected org
+                        };
+                    }
+                    Screen::NewWizard {
+                        step: WizardStep::Confirm,
+                        name,
+                        available_repos,
+                        groups,
+                        selected_group,
+                        selected,
+                        focused,
+                    } => {
+                        self.screen = Screen::NewWizard {
+                            step: WizardStep::SelectRepos,
+                            name,
+                            available_repos,
+                            groups,
+                            selected_group,
+                            selected,
+                            focused,
+                        };
+                    }
+                    Screen::ConfirmDialog { .. } => {
+                        self.refresh_workspaces();
+                    }
+                    _ => {}
                 }
-                Screen::ConfirmDialog { .. } => {
-                    self.screen = Screen::WorkspaceList;
-                    self.refresh_workspaces();
-                }
-                _ => {}
-            },
+            }
 
             // --- Start new workspace wizard ---
             Message::StartNewWizard => {
@@ -412,7 +400,22 @@ impl App {
                             name
                         };
 
-                        if groups.len() <= 1 {
+                        if groups.is_empty() {
+                            // No orgs discovered — cannot proceed
+                            self.set_status(
+                                "No repositories found. Check scan_roots in config.".to_string(),
+                                StatusLevel::Error,
+                            );
+                            self.screen = Screen::NewWizard {
+                                step: WizardStep::EnterName,
+                                name,
+                                available_repos,
+                                groups,
+                                selected_group: 0,
+                                selected,
+                                focused: 0,
+                            };
+                        } else if groups.len() == 1 {
                             // Only one org — skip group selection, auto-select it
                             self.screen = Screen::NewWizard {
                                 step: WizardStep::SelectRepos,
@@ -785,6 +788,34 @@ mod tests {
             step: WizardStep::EnterName,
             name: String::new(),
             available_repos: vec![],
+            groups: vec!["test-org".to_string()],
+            selected_group: 0,
+            selected: HashSet::new(),
+            focused: 0,
+        };
+
+        app.update(Message::WizardNextStep);
+
+        // With one group, should auto-skip to SelectRepos with a generated name
+        if let Screen::NewWizard { name, step, .. } = &app.screen {
+            assert!(!name.is_empty(), "Name should be generated");
+            assert_eq!(name.split('-').count(), 3, "Name should be adj-mod-noun");
+            assert_eq!(*step, WizardStep::SelectRepos);
+        } else {
+            panic!("Expected NewWizard screen");
+        }
+    }
+
+    #[test]
+    fn test_wizard_empty_groups_shows_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let mut app = App::new(config);
+
+        app.screen = Screen::NewWizard {
+            step: WizardStep::EnterName,
+            name: "test-ws".to_string(),
+            available_repos: vec![],
             groups: vec![],
             selected_group: 0,
             selected: HashSet::new(),
@@ -793,15 +824,13 @@ mod tests {
 
         app.update(Message::WizardNextStep);
 
-        // With no groups, should advance to SelectRepos with a generated name
-        if let Screen::NewWizard { name, step, .. } = &app.screen {
-            assert!(!name.is_empty(), "Name should be generated");
-            assert_eq!(name.split('-').count(), 3, "Name should be adj-mod-noun");
-            // With 0 groups, the wizard skips to SelectRepos
-            assert_eq!(*step, WizardStep::SelectRepos);
+        // With no groups, should stay on EnterName and show error
+        if let Screen::NewWizard { step, .. } = &app.screen {
+            assert_eq!(*step, WizardStep::EnterName);
         } else {
             panic!("Expected NewWizard screen");
         }
+        assert!(app.status.is_some(), "Should show error status");
     }
 
     #[test]
