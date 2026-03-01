@@ -150,7 +150,7 @@ mod tests {
             name: String::new(),
             available_repos: vec![],
             groups: vec![],
-            selected_group: 0,
+            selected_groups: std::collections::HashSet::new(),
             selected: std::collections::HashSet::new(),
             focused: 0,
         };
