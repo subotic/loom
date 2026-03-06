@@ -158,6 +158,19 @@ fn merge_sorted(global: &[String], preset: &[String]) -> Vec<String> {
     merged
 }
 
+/// Merge two filesystem path slices, convert to Claude Code sandbox convention,
+/// then sort and deduplicate.
+fn merge_sandbox_paths(global: &[String], preset: &[String]) -> Vec<String> {
+    let mut paths: Vec<String> = global
+        .iter()
+        .chain(preset.iter())
+        .map(|p| to_sandbox_path(p))
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
 /// Convert a sandbox filesystem path to Claude Code's settings.json convention.
 ///
 /// Claude Code resolves sandbox paths as:
@@ -219,16 +232,13 @@ fn build_sandbox_json(
         );
     }
 
-    // Merge filesystem arrays: global ∪ preset, then convert to Claude Code path convention
+    // Merge filesystem arrays: global ∪ preset, convert to Claude Code path convention
     let preset_fs = preset.map(|p| &p.sandbox.filesystem);
 
-    let mut allow_write: Vec<String> = merge_sorted(
+    let mut allow_write = merge_sandbox_paths(
         &sandbox.filesystem.allow_write,
         preset_fs.map_or(&[], |fs| &fs.allow_write),
-    )
-    .into_iter()
-    .map(|p| to_sandbox_path(&p))
-    .collect();
+    );
 
     // Auto-inject original repo .git paths for worktree operations
     if sandbox.enabled == Some(true) {
@@ -236,29 +246,18 @@ fn build_sandbox_json(
             let git_dir = repo.original_path.join(".git");
             allow_write.push(to_sandbox_path(&git_dir.display().to_string()));
         }
+        allow_write.sort();
+        allow_write.dedup();
     }
-    allow_write.sort();
-    allow_write.dedup();
 
-    let mut deny_write: Vec<String> = merge_sorted(
+    let deny_write = merge_sandbox_paths(
         &sandbox.filesystem.deny_write,
         preset_fs.map_or(&[], |fs| &fs.deny_write),
-    )
-    .into_iter()
-    .map(|p| to_sandbox_path(&p))
-    .collect();
-    deny_write.sort();
-    deny_write.dedup();
-
-    let mut deny_read: Vec<String> = merge_sorted(
+    );
+    let deny_read = merge_sandbox_paths(
         &sandbox.filesystem.deny_read,
         preset_fs.map_or(&[], |fs| &fs.deny_read),
-    )
-    .into_iter()
-    .map(|p| to_sandbox_path(&p))
-    .collect();
-    deny_read.sort();
-    deny_read.dedup();
+    );
 
     if !allow_write.is_empty() || !deny_write.is_empty() || !deny_read.is_empty() {
         let mut fs_obj = serde_json::Map::new();
