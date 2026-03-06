@@ -259,6 +259,10 @@ fn generate_settings(
         obj["model"] = serde_json::json!(model);
     }
 
+    if let Some(effort) = cc_config.effort_level {
+        obj["effortLevel"] = serde_json::json!(effort);
+    }
+
     if !cc_config.extra_known_marketplaces.is_empty() {
         let mut marketplaces = serde_json::Map::new();
         for entry in &cc_config.extra_known_marketplaces {
@@ -314,9 +318,9 @@ fn generate_settings(
 mod tests {
     use super::*;
     use crate::config::{
-        AgentsConfig, ClaudeCodeConfig, DefaultsConfig, MarketplaceEntry, PermissionPreset,
-        PresetSandboxConfig, RegistryConfig, RepoConfig, SandboxConfig, SandboxFilesystemConfig,
-        SandboxNetworkConfig, SpecsConfig, Workflow, WorkspaceConfig,
+        AgentsConfig, ClaudeCodeConfig, DefaultsConfig, EffortLevel, MarketplaceEntry,
+        PermissionPreset, PresetSandboxConfig, RegistryConfig, RepoConfig, SandboxConfig,
+        SandboxFilesystemConfig, SandboxNetworkConfig, SpecsConfig, Workflow, WorkspaceConfig,
     };
     use crate::manifest::RepoManifestEntry;
     use std::collections::BTreeMap;
@@ -387,6 +391,17 @@ mod tests {
         let manifest = test_manifest();
         let cc_config = ClaudeCodeConfig {
             model: Some("opus".to_string()),
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_with_effort_level_snapshot() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            effort_level: Some(EffortLevel::High),
             ..Default::default()
         };
         let content = generate_settings(&manifest, &cc_config, None);
@@ -719,6 +734,8 @@ mod tests {
         );
 
         let cc_config = ClaudeCodeConfig {
+            model: Some("opus".to_string()),
+            effort_level: Some(EffortLevel::High),
             extra_known_marketplaces: vec![MarketplaceEntry {
                 name: "test-marketplace".to_string(),
                 repo: "org/test-plugins".to_string(),

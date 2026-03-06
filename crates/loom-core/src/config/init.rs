@@ -161,6 +161,7 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 # Permissions — explicit tool allowlists:
 # [agents.claude-code]
 # model = \"opus\"    # Pin the Claude model (sonnet, opus, haiku, etc.)
+# effort_level = \"high\"  # Adaptive reasoning effort (low/medium/high)
 # allowed_tools = [
 #     \"Bash(gh issue *)\",
 #     \"Bash(gh run *)\",

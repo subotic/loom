@@ -173,12 +173,25 @@ pub struct PermissionPreset {
     pub sandbox: PresetSandboxConfig,
 }
 
+/// Effort level for adaptive reasoning (Opus 4.6 / Sonnet 4.6 only).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EffortLevel {
+    Low,
+    Medium,
+    High,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ClaudeCodeConfig {
     /// Claude model alias or full model ID (e.g., "opus", "claude-opus-4-6")
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+
+    /// Effort level for adaptive reasoning (e.g., "low", "medium", "high")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort_level: Option<EffortLevel>,
 
     /// Extra marketplace repos
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -205,6 +218,7 @@ impl ClaudeCodeConfig {
     /// Returns true when all fields are empty (used by serde skip_serializing_if and init re-check).
     pub fn is_empty(&self) -> bool {
         self.model.is_none()
+            && self.effort_level.is_none()
             && self.extra_known_marketplaces.is_empty()
             && self.enabled_plugins.is_empty()
             && self.allowed_tools.is_empty()
@@ -2005,5 +2019,63 @@ root = "/loom"
         };
 
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_effort_level_round_trip() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+
+[agents.claude-code]
+effort_level = "high"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            config.agents.claude_code.effort_level,
+            Some(EffortLevel::High)
+        );
+
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        let reparsed: Config = toml::from_str(&serialized).unwrap();
+        assert_eq!(
+            reparsed.agents.claude_code.effort_level,
+            Some(EffortLevel::High)
+        );
+    }
+
+    #[test]
+    fn test_effort_level_invalid_value_rejected() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+
+[agents.claude-code]
+effort_level = "max"
+"#;
+        let result = toml::from_str::<Config>(toml_str);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_effort_level_none_keeps_config_empty() {
+        let config = ClaudeCodeConfig::default();
+        assert!(config.is_empty());
+        assert!(config.effort_level.is_none());
+    }
+
+    #[test]
+    fn test_effort_level_some_makes_config_non_empty() {
+        let config = ClaudeCodeConfig {
+            effort_level: Some(EffortLevel::Medium),
+            ..Default::default()
+        };
+        assert!(!config.is_empty());
     }
 }
