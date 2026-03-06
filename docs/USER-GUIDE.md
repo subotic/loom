@@ -629,6 +629,7 @@ enabled = true
 auto_allow = true                          # Auto-allow Bash if sandboxed
 excluded_commands = ["docker"]             # Commands that bypass sandbox
 allow_unsandboxed_commands = false         # Block unsandboxed commands entirely
+# enable_weaker_network_isolation = true   # macOS only: fix Go TLS errors with MITM proxy
 
 [agents.claude-code.sandbox.filesystem]
 allow_write = ["~/.cargo", "~/.config/loom"]
@@ -739,6 +740,7 @@ frontend = ["dsp-app", "dsp-dashboard"]
 | `auto_allow` | `bool` | `false` | Auto-allow Bash commands when sandboxed. Maps to `autoAllowBashIfSandboxed` in settings.json. |
 | `excluded_commands` | `string[]` | `[]` | Commands that bypass the sandbox. |
 | `allow_unsandboxed_commands` | `bool` | — | Whether to allow unsandboxed commands at all. |
+| `enable_weaker_network_isolation` | `bool` | — | (macOS only) Weaken sandbox network isolation so Go-based tools (`gh`, `gcloud`, `terraform`) can verify TLS certificates through an MITM proxy. See [Troubleshooting](#common-errors). |
 
 #### `[agents.claude-code.sandbox.filesystem]` (Optional)
 
@@ -918,6 +920,8 @@ Each flavor generates a different `.claude/settings.json`. Here's what each prod
   }
 }
 ```
+
+> **`enableWeakerNetworkIsolation`** (macOS only): Allows Go-based tools (`gh`, `gcloud`, `terraform`) to verify TLS certificates when Claude Code's sandbox uses an MITM proxy. Enable this if you see TLS errors like `x509: OSStatus -26276` from these tools.
 
 **Permissions:**
 
@@ -1448,6 +1452,21 @@ Your current directory becomes invalid after teardown. `cd` to a different direc
 
 **Upgrading from older LOOM**
 The old `.claude/settings.local.json` is automatically cleaned up when agent files are regenerated. Old manifests without a `branch` field are forward-compatible (fall back to `{prefix}/{name}`).
+
+**TLS certificate errors from `gh`, `gcloud`, or `terraform` in sandbox**
+
+```
+tls: failed to verify certificate: x509: OSStatus -26276
+```
+
+This occurs when Go programs run inside Claude Code's sandbox with network isolation (macOS only). Enable weaker network isolation in your config. **Note:** this weakens TLS certificate verification for Go-based tools, so only enable it if you understand the trade-off.
+
+```toml
+[agents.claude-code.sandbox]
+enable_weaker_network_isolation = true
+```
+
+Then regenerate settings: `loom refresh`
 
 **Plugin not loading**
 Check the `enabled_plugins` format: must be `"pluginName@marketplaceName"`. Verify the marketplace is registered in `extra_known_marketplaces` or globally in `~/.claude/plugins/known_marketplaces.json`. Plugins fail **silently** if the key is wrong.

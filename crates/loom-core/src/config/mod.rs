@@ -127,6 +127,8 @@ pub struct SandboxConfig {
     pub excluded_commands: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_unsandboxed_commands: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enable_weaker_network_isolation: Option<bool>,
     #[serde(default, skip_serializing_if = "SandboxFilesystemConfig::is_empty")]
     pub filesystem: SandboxFilesystemConfig,
     #[serde(default, skip_serializing_if = "SandboxNetworkConfig::is_empty")]
@@ -139,6 +141,7 @@ impl SandboxConfig {
             && self.auto_allow.is_none()
             && self.excluded_commands.is_empty()
             && self.allow_unsandboxed_commands.is_none()
+            && self.enable_weaker_network_isolation.is_none()
             && self.filesystem.is_empty()
             && self.network.is_empty()
     }
@@ -1194,6 +1197,7 @@ enabled = ["claude-code"]
                         auto_allow: Some(true),
                         excluded_commands: vec!["docker".to_string()],
                         allow_unsandboxed_commands: Some(false),
+                        enable_weaker_network_isolation: None,
                         filesystem: SandboxFilesystemConfig {
                             allow_write: vec!["~/.cargo".to_string()],
                             deny_write: vec![],
@@ -1513,6 +1517,7 @@ enabled = ["claude-code"]
                         auto_allow: Some(true),
                         excluded_commands: vec!["docker".to_string()],
                         allow_unsandboxed_commands: None,
+                        enable_weaker_network_isolation: None,
                         filesystem: SandboxFilesystemConfig {
                             allow_write: vec!["~/.config/loom".to_string()],
                             deny_write: vec![],
