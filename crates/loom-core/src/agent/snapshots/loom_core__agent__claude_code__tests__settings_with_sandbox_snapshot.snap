@@ -16,6 +16,8 @@ expression: content
     ],
     "filesystem": {
       "allowWrite": [
+        "//code/dasch-swiss/dsp-api/.git",
+        "//code/dasch-swiss/dsp-das/.git",
         "~/.config/loom"
       ]
     },

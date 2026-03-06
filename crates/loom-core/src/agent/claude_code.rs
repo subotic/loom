@@ -158,10 +158,36 @@ fn merge_sorted(global: &[String], preset: &[String]) -> Vec<String> {
     merged
 }
 
-/// Build the sandbox JSON object from global config and optional preset.
+/// Convert a sandbox filesystem path to Claude Code's settings.json convention.
+///
+/// Claude Code resolves sandbox paths as:
+/// - `//path` → absolute from filesystem root
+/// - `~/path` → relative to $HOME
+/// - `/path`  → relative to settings file directory (NOT absolute!)
+///
+/// TOML config stores standard absolute paths (e.g., `/Users/me/.cargo`),
+/// so we must convert them to `//` prefix for settings.json.
+fn to_sandbox_path(path: &str) -> String {
+    if path.starts_with("//") || path.starts_with("~/") {
+        // Already using Claude Code convention
+        path.to_string()
+    } else if path.starts_with('/') {
+        // Absolute path — prepend extra / for Claude Code
+        format!("/{path}")
+    } else {
+        // Relative path — pass through as-is
+        path.to_string()
+    }
+}
+
+/// Build the sandbox JSON object from global config, optional preset, and manifest repos.
+///
+/// When `sandbox.enabled == Some(true)`, auto-injects each repo's original `.git`
+/// directory into `allowWrite` so git worktree operations can access shared state.
 fn build_sandbox_json(
     sandbox: &crate::config::SandboxConfig,
     preset: Option<&crate::config::PermissionPreset>,
+    repos: &[crate::manifest::RepoManifestEntry],
 ) -> serde_json::Map<String, serde_json::Value> {
     let mut obj = serde_json::Map::new();
 
@@ -193,20 +219,46 @@ fn build_sandbox_json(
         );
     }
 
-    // Merge filesystem arrays: global ∪ preset
+    // Merge filesystem arrays: global ∪ preset, then convert to Claude Code path convention
     let preset_fs = preset.map(|p| &p.sandbox.filesystem);
-    let allow_write = merge_sorted(
+
+    let mut allow_write: Vec<String> = merge_sorted(
         &sandbox.filesystem.allow_write,
         preset_fs.map_or(&[], |fs| &fs.allow_write),
-    );
-    let deny_write = merge_sorted(
+    )
+    .into_iter()
+    .map(|p| to_sandbox_path(&p))
+    .collect();
+
+    // Auto-inject original repo .git paths for worktree operations
+    if sandbox.enabled == Some(true) {
+        for repo in repos {
+            let git_dir = repo.original_path.join(".git");
+            allow_write.push(to_sandbox_path(&git_dir.display().to_string()));
+        }
+    }
+    allow_write.sort();
+    allow_write.dedup();
+
+    let mut deny_write: Vec<String> = merge_sorted(
         &sandbox.filesystem.deny_write,
         preset_fs.map_or(&[], |fs| &fs.deny_write),
-    );
-    let deny_read = merge_sorted(
+    )
+    .into_iter()
+    .map(|p| to_sandbox_path(&p))
+    .collect();
+    deny_write.sort();
+    deny_write.dedup();
+
+    let mut deny_read: Vec<String> = merge_sorted(
         &sandbox.filesystem.deny_read,
         preset_fs.map_or(&[], |fs| &fs.deny_read),
-    );
+    )
+    .into_iter()
+    .map(|p| to_sandbox_path(&p))
+    .collect();
+    deny_read.sort();
+    deny_read.dedup();
 
     if !allow_write.is_empty() || !deny_write.is_empty() || !deny_read.is_empty() {
         let mut fs_obj = serde_json::Map::new();
@@ -305,7 +357,7 @@ fn generate_settings(
 
     // Build sandbox from global config + preset arrays
     if !cc_config.sandbox.is_empty() || preset.is_some_and(|p| !p.sandbox.is_empty()) {
-        let sandbox_obj = build_sandbox_json(&cc_config.sandbox, preset);
+        let sandbox_obj = build_sandbox_json(&cc_config.sandbox, preset, &manifest.repos);
         if !sandbox_obj.is_empty() {
             obj["sandbox"] = serde_json::Value::Object(sandbox_obj);
         }
