@@ -186,6 +186,12 @@ fn build_sandbox_json(
             serde_json::json!(allow_unsandboxed),
         );
     }
+    if let Some(val) = sandbox.enable_weaker_network_isolation {
+        obj.insert(
+            "enableWeakerNetworkIsolation".to_string(),
+            serde_json::json!(val),
+        );
+    }
 
     // Merge filesystem arrays: global ∪ preset
     let preset_fs = preset.map(|p| &p.sandbox.filesystem);
@@ -623,6 +629,7 @@ mod tests {
                 auto_allow: Some(true),
                 excluded_commands: vec!["docker".to_string()],
                 allow_unsandboxed_commands: Some(false),
+                enable_weaker_network_isolation: None,
                 filesystem: SandboxFilesystemConfig {
                     allow_write: vec!["~/.config/loom".to_string()],
                     ..Default::default()
@@ -673,6 +680,7 @@ mod tests {
                 auto_allow: Some(true),
                 excluded_commands: vec!["docker".to_string()],
                 allow_unsandboxed_commands: Some(false),
+                enable_weaker_network_isolation: None,
                 filesystem: SandboxFilesystemConfig {
                     allow_write: vec!["~/.config/loom".to_string()],
                     ..Default::default()
@@ -724,6 +732,7 @@ mod tests {
                 // Intentionally None — verifies that the key is omitted from JSON when unset,
                 // complementing the preset snapshot test which sets it to Some(false).
                 allow_unsandboxed_commands: None,
+                enable_weaker_network_isolation: None,
                 filesystem: SandboxFilesystemConfig {
                     allow_write: vec!["~/.config/loom".to_string()],
                     ..Default::default()
@@ -748,6 +757,25 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert!(parsed.get("permissions").is_none());
         assert!(parsed.get("sandbox").is_none());
+    }
+
+    #[test]
+    fn test_settings_enable_weaker_network_isolation() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            sandbox: SandboxConfig {
+                enabled: Some(true),
+                enable_weaker_network_isolation: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(
+            parsed["sandbox"]["enableWeakerNetworkIsolation"],
+            serde_json::json!(true)
+        );
     }
 
     #[test]
