@@ -613,6 +613,7 @@ enabled = ["claude-code"]                  # Which agent integrations to generat
 
 [agents.claude-code]
 model = "opus"                             # Pin Claude model (optional)
+effort_level = "high"                      # Adaptive reasoning effort (low/medium/high)
 allowed_tools = [                          # Global tool allowlist
     "Bash(gh issue *)",
     "Bash(gh run *)",
@@ -726,6 +727,7 @@ frontend = ["dsp-app", "dsp-dashboard"]
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `model` | `string` | — | Pin a Claude model (e.g., `"opus"`, `"sonnet"`). |
+| `effort_level` | `string` | — | Adaptive reasoning effort level. Valid: `"low"`, `"medium"`, `"high"`. Only affects Opus 4.6 / Sonnet 4.6. |
 | `allowed_tools` | `string[]` | `[]` | Global tool allowlist. Format: `ToolName(specifier)`. See [Permission Pattern Syntax](#permission-pattern-syntax). |
 | `enabled_plugins` | `string[]` | `[]` | Plugins to enable. Format: `"pluginName@marketplaceName"`. |
 | `extra_known_marketplaces` | `table[]` | `[]` | Additional plugin marketplace sources. Each entry: `{ name = "...", repo = "owner/repo" }`. |
@@ -1119,6 +1121,7 @@ The workspace root gets a `CLAUDE.md` containing:
 |---|---|
 | (always) | `additionalDirectories` (paths to repo worktrees) |
 | `model` | `model` |
+| `effort_level` | `effortLevel` |
 | `allowed_tools` + preset | `permissions.allow` |
 | `sandbox.*` | `sandbox.*` (camelCase mapped) |
 | `enabled_plugins` | `enabledPlugins` (map of name → `true`) |
