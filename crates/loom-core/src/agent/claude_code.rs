@@ -860,4 +860,91 @@ mod tests {
         assert_eq!(allow.len(), 1);
         assert_eq!(allow[0], "Bash(gh issue *)");
     }
+
+    #[test]
+    fn test_to_sandbox_path_absolute() {
+        assert_eq!(to_sandbox_path("/Users/me/.cargo"), "//Users/me/.cargo");
+    }
+
+    #[test]
+    fn test_to_sandbox_path_already_double_slash() {
+        assert_eq!(to_sandbox_path("//Users/me/.cargo"), "//Users/me/.cargo");
+    }
+
+    #[test]
+    fn test_to_sandbox_path_home_relative() {
+        assert_eq!(to_sandbox_path("~/.config/loom"), "~/.config/loom");
+    }
+
+    #[test]
+    fn test_to_sandbox_path_relative() {
+        assert_eq!(to_sandbox_path("target/debug"), "target/debug");
+    }
+
+    #[test]
+    fn test_settings_sandbox_absolute_paths_converted() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            sandbox: SandboxConfig {
+                enabled: Some(true),
+                filesystem: SandboxFilesystemConfig {
+                    allow_write: vec!["/Users/me/.cargo".to_string()],
+                    deny_write: vec!["/etc/passwd".to_string()],
+                    deny_read: vec!["/private/secrets".to_string()],
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_sandbox_no_git_injection_when_disabled() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            sandbox: SandboxConfig {
+                // enabled is None — .git paths should NOT be injected
+                filesystem: SandboxFilesystemConfig {
+                    allow_write: vec!["~/.config/loom".to_string()],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let allow = parsed["sandbox"]["filesystem"]["allowWrite"]
+            .as_array()
+            .unwrap();
+        // Only the user-configured path, no .git paths
+        assert_eq!(allow.len(), 1);
+        assert_eq!(allow[0], "~/.config/loom");
+    }
+
+    #[test]
+    fn test_settings_sandbox_no_git_injection_when_explicitly_false() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            sandbox: SandboxConfig {
+                enabled: Some(false),
+                filesystem: SandboxFilesystemConfig {
+                    allow_write: vec!["~/.config/loom".to_string()],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let allow = parsed["sandbox"]["filesystem"]["allowWrite"]
+            .as_array()
+            .unwrap();
+        // enabled = false — .git paths should NOT be injected
+        assert_eq!(allow.len(), 1);
+        assert_eq!(allow[0], "~/.config/loom");
+    }
 }
