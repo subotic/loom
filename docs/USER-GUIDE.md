@@ -748,9 +748,9 @@ frontend = ["dsp-app", "dsp-dashboard"]
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `allow_write` | `string[]` | `[]` | Paths the sandbox allows writing to. |
-| `deny_write` | `string[]` | `[]` | Paths explicitly denied for writing. |
-| `deny_read` | `string[]` | `[]` | Paths explicitly denied for reading. |
+| `allow_write` | `string[]` | `[]` | Paths the sandbox allows writing to. Absolute paths (e.g., `/Users/me/.cargo`) are automatically converted to Claude Code's `//` prefix convention in settings.json. Original repo `.git` paths are auto-injected when sandbox is enabled. |
+| `deny_write` | `string[]` | `[]` | Paths explicitly denied for writing. Absolute paths are auto-converted to `//` prefix. |
+| `deny_read` | `string[]` | `[]` | Paths explicitly denied for reading. Absolute paths are auto-converted to `//` prefix. |
 
 #### `[agents.claude-code.sandbox.network]` (Optional)
 
@@ -1127,6 +1127,8 @@ The workspace root gets a `CLAUDE.md` containing:
 | `enabled_plugins` | `enabledPlugins` (map of name → `true`) |
 | `extra_known_marketplaces` | `extraKnownMarketplaces` |
 
+> **Path convention:** Claude Code's sandbox interprets `/path` as relative to the settings file directory, not as an absolute path. LOOM automatically converts absolute paths to `//path` (filesystem-root-absolute) and `~/path` (home-relative) paths pass through unchanged. Additionally, when `sandbox.enabled = true`, LOOM auto-injects each original repo's `.git` directory into `allowWrite` so git worktree operations can access shared state.
+
 ### Plugin Configuration
 
 Plugins are specified by name and marketplace:
@@ -1467,6 +1469,23 @@ This occurs when Go programs run inside Claude Code's sandbox with network isola
 ```toml
 [agents.claude-code.sandbox]
 enable_weaker_network_isolation = true
+```
+
+Then regenerate settings: `loom refresh`
+
+**Git operations fail with "Operation not permitted" in sandbox**
+
+```
+fatal: Unable to create '.../.git/worktrees/<name>/index.lock': Operation not permitted
+```
+
+Claude Code's sandbox blocks writes to `.git` directories by default. LOOM auto-injects the original repo's `.git` path into `allowWrite`, but Claude Code's internal `denyWithinAllow` mechanism may still block some `.git` writes within the worktree CWD ([#29316](https://github.com/anthropics/claude-code/issues/29316), [#13195](https://github.com/anthropics/claude-code/issues/13195)).
+
+**Recommended fix:** Add `"git"` to `excluded_commands` so git runs outside the sandbox entirely:
+
+```toml
+[agents.claude-code.sandbox]
+excluded_commands = ["git"]
 ```
 
 Then regenerate settings: `loom refresh`
