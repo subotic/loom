@@ -11,7 +11,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_color: bool,
 
-    /// Increase verbosity (-v, -vv, -vvv)
+    /// Increase verbosity (-v, -vv)
     #[arg(short, long, global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
 
@@ -148,7 +148,6 @@ pub enum Command {
 
 impl Cli {
     /// Resolve effective verbosity: --quiet wins over --verbose
-    #[allow(dead_code)] // Used in Phase 2 when commands check verbosity
     pub fn verbosity(&self) -> Verbosity {
         if self.quiet {
             Verbosity::Quiet
@@ -163,7 +162,7 @@ impl Cli {
 
     /// Whether colored output should be used.
     /// Disabled by --no-color flag, NO_COLOR env var, --json flag, or non-TTY stdout.
-    #[allow(dead_code)] // Used in Phase 2 when commands emit colored output
+    #[allow(dead_code)] // Wired up when commands emit colored output
     pub fn use_color(&self) -> bool {
         !self.no_color && std::env::var_os("NO_COLOR").is_none() && !self.json
     }
@@ -448,8 +447,11 @@ impl Cli {
                 )
             })?;
 
-        add_repo(&config, &ws_path, &mut manifest, repo)?;
+        let matched = add_repo(&config, &ws_path, &mut manifest, repo)?;
         println!("Added '{}' to workspace '{}'.", repo_name, manifest.name);
+        for mc in &matched {
+            println!("  {mc}");
+        }
         println!("Hint: Restart Claude Code to pick up the new repo.");
 
         Ok(())
@@ -465,11 +467,14 @@ impl Cli {
 
         let (ws_path, mut manifest) = workspace::resolve_workspace(None, &cwd, &config)?;
 
-        remove_repo(&config, &ws_path, &mut manifest, &repo_name, force)?;
+        let matched = remove_repo(&config, &ws_path, &mut manifest, &repo_name, force)?;
         println!(
             "Removed '{}' from workspace '{}'.",
             repo_name, manifest.name
         );
+        for mc in &matched {
+            println!("  {mc}");
+        }
         println!("Hint: Restart Claude Code to pick up the change.");
 
         Ok(())
@@ -541,11 +546,15 @@ impl Cli {
         }
         if result.remaining.is_empty() {
             println!("Workspace '{}' torn down.", manifest.name);
+            // Full teardown: no agent files remain, so matched_configs is empty by design.
         } else {
             println!(
                 "Partial teardown. Remaining: {}",
                 result.remaining.join(", ")
             );
+            for mc in &result.matched_configs {
+                println!("  {mc}");
+            }
         }
 
         Ok(())
@@ -830,6 +839,9 @@ impl Cli {
         );
         println!("  Branch: {}", result.branch);
         println!("  {} repo(s) added", result.repos_added);
+        for mc in &result.matched_configs {
+            println!("  {mc}");
+        }
 
         if !result.repos_failed.is_empty() {
             eprintln!("  {} repo(s) failed:", result.repos_failed.len());
@@ -873,9 +885,16 @@ impl Cli {
             manifest::write_manifest(&ws_path.join(workspace::MANIFEST_FILENAME), &manifest)?;
         }
 
-        generate_agent_files(&config, &ws_path, &manifest)?;
+        let matched = generate_agent_files(&config, &ws_path, &manifest)?;
 
         println!("Refreshed agent files for workspace '{}'.", manifest.name);
+        if matched.is_empty() {
+            println!("  (no repo configs matched)");
+        } else {
+            for mc in &matched {
+                println!("  {mc}");
+            }
+        }
         Ok(())
     }
 
@@ -957,6 +976,10 @@ impl Cli {
             }
         }
 
+        for mc in &result.matched_configs {
+            println!("  {mc}");
+        }
+
         for warning in &result.warnings {
             println!("  Warning: {warning}");
         }
@@ -1028,11 +1051,10 @@ impl Cli {
 
 /// Verbosity level resolved from --quiet and --verbose flags
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // Used in Phase 2 when commands check verbosity
 pub enum Verbosity {
     /// --quiet: errors only
     Quiet,
-    /// Default: info level
+    /// Default: warn level
     Normal,
     /// -v: debug level
     Verbose,

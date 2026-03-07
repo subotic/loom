@@ -16,6 +16,23 @@ pub struct GeneratedFile {
     pub content: String,
 }
 
+/// A per-repo config entry that matched a manifest repo during agent file generation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchedRepoConfig {
+    pub repo: String,
+    pub workflow: crate::config::Workflow,
+}
+
+impl std::fmt::Display for MatchedRepoConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Matched config for '{}' (workflow: {})",
+            self.repo, self.workflow
+        )
+    }
+}
+
 /// Trait for generating agent configuration files in a workspace.
 pub trait AgentGenerator {
     /// Human-readable name for this generator (e.g., "claude-code").
@@ -33,17 +50,27 @@ pub fn generate_agent_files(
     config: &Config,
     ws_path: &Path,
     manifest: &WorkspaceManifest,
-) -> Result<()> {
+) -> Result<Vec<MatchedRepoConfig>> {
     // Validate preset exists (stale preset check)
     if let Some(ref preset_name) = manifest.preset {
         crate::config::validate_preset_exists(&config.agents.claude_code.presets, preset_name)?;
     }
 
-    // Warn about configured repo names that don't match any manifest entry
+    // Collect applied repo configs and debug-log non-matches
+    let mut applied = Vec::new();
+    for repo in &manifest.repos {
+        if let Some(repo_config) = config.repos.get(&repo.name) {
+            applied.push(MatchedRepoConfig {
+                repo: repo.name.clone(),
+                workflow: repo_config.workflow,
+            });
+        }
+    }
     for repo_key in config.repos.keys() {
         if !manifest.repos.iter().any(|r| r.name == *repo_key) {
-            eprintln!(
-                "Warning: [repos.{repo_key}] in config does not match any workspace repo, ignoring."
+            tracing::debug!(
+                repo = %repo_key,
+                "config entry does not match any workspace repo, skipping"
             );
         }
     }
@@ -52,7 +79,7 @@ pub fn generate_agent_files(
         let generator: Box<dyn AgentGenerator> = match agent_name.as_str() {
             "claude-code" => Box::new(claude_code::ClaudeCodeGenerator),
             other => {
-                eprintln!("Warning: unknown agent '{}', skipping.", other);
+                tracing::warn!(agent = other, "unknown agent, skipping");
                 continue;
             }
         };
@@ -80,13 +107,15 @@ pub fn generate_agent_files(
         }
     }
 
-    Ok(())
+    Ok(applied)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AgentsConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
+    use crate::config::{
+        AgentsConfig, DefaultsConfig, RegistryConfig, RepoConfig, Workflow, WorkspaceConfig,
+    };
     use crate::manifest::RepoManifestEntry;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
@@ -272,5 +301,193 @@ mod tests {
         };
 
         generate_agent_files(&config, &ws_path, &manifest).unwrap();
+    }
+
+    #[test]
+    fn test_applied_repo_configs_when_matching() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws_path = dir.path().join("my-ws");
+        std::fs::create_dir_all(&ws_path).unwrap();
+
+        let mut repos = BTreeMap::new();
+        repos.insert(
+            "pkm".to_string(),
+            RepoConfig {
+                workflow: Workflow::Push,
+            },
+        );
+        repos.insert(
+            "loom".to_string(),
+            RepoConfig {
+                workflow: Workflow::Pr,
+            },
+        );
+
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos,
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                ..Default::default()
+            },
+        };
+
+        let manifest = WorkspaceManifest {
+            name: "my-ws".to_string(),
+            branch: None,
+            created: chrono::Utc::now(),
+            base_branch: None,
+            preset: None,
+            repos: vec![
+                RepoManifestEntry {
+                    name: "pkm".to_string(),
+                    original_path: PathBuf::from("/code/subotic/pkm"),
+                    worktree_path: ws_path.join("pkm"),
+                    branch: "loom/my-ws".to_string(),
+                    remote_url: "git@github.com:subotic/pkm.git".to_string(),
+                },
+                RepoManifestEntry {
+                    name: "loom".to_string(),
+                    original_path: PathBuf::from("/code/subotic/loom"),
+                    worktree_path: ws_path.join("loom"),
+                    branch: "loom/my-ws".to_string(),
+                    remote_url: "git@github.com:subotic/loom.git".to_string(),
+                },
+            ],
+        };
+
+        let matched = generate_agent_files(&config, &ws_path, &manifest).unwrap();
+        assert_eq!(matched.len(), 2);
+        let by_name: std::collections::HashMap<_, _> =
+            matched.iter().map(|m| (m.repo.as_str(), m)).collect();
+        assert_eq!(by_name["pkm"].workflow, Workflow::Push);
+        assert_eq!(by_name["loom"].workflow, Workflow::Pr);
+    }
+
+    #[test]
+    fn test_applied_repo_configs_empty_when_no_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws_path = dir.path().join("my-ws");
+        std::fs::create_dir_all(&ws_path).unwrap();
+
+        let mut repos = BTreeMap::new();
+        repos.insert(
+            "other-repo".to_string(),
+            RepoConfig {
+                workflow: Workflow::Pr,
+            },
+        );
+
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos,
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                ..Default::default()
+            },
+        };
+
+        let manifest = WorkspaceManifest {
+            name: "my-ws".to_string(),
+            branch: None,
+            created: chrono::Utc::now(),
+            base_branch: None,
+            preset: None,
+            repos: vec![RepoManifestEntry {
+                name: "dsp-api".to_string(),
+                original_path: PathBuf::from("/code/dasch-swiss/dsp-api"),
+                worktree_path: ws_path.join("dsp-api"),
+                branch: "loom/my-ws".to_string(),
+                remote_url: "git@github.com:dasch-swiss/dsp-api.git".to_string(),
+            }],
+        };
+
+        let matched = generate_agent_files(&config, &ws_path, &manifest).unwrap();
+        assert!(matched.is_empty());
+    }
+
+    #[test]
+    fn test_applied_repo_configs_mixed() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws_path = dir.path().join("my-ws");
+        std::fs::create_dir_all(&ws_path).unwrap();
+
+        let mut repos = BTreeMap::new();
+        repos.insert(
+            "pkm".to_string(),
+            RepoConfig {
+                workflow: Workflow::Push,
+            },
+        );
+        repos.insert(
+            "unrelated".to_string(),
+            RepoConfig {
+                workflow: Workflow::Pr,
+            },
+        );
+
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos,
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                ..Default::default()
+            },
+        };
+
+        let manifest = WorkspaceManifest {
+            name: "my-ws".to_string(),
+            branch: None,
+            created: chrono::Utc::now(),
+            base_branch: None,
+            preset: None,
+            repos: vec![
+                RepoManifestEntry {
+                    name: "pkm".to_string(),
+                    original_path: PathBuf::from("/code/subotic/pkm"),
+                    worktree_path: ws_path.join("pkm"),
+                    branch: "loom/my-ws".to_string(),
+                    remote_url: "git@github.com:subotic/pkm.git".to_string(),
+                },
+                RepoManifestEntry {
+                    name: "dsp-api".to_string(),
+                    original_path: PathBuf::from("/code/dasch-swiss/dsp-api"),
+                    worktree_path: ws_path.join("dsp-api"),
+                    branch: "loom/my-ws".to_string(),
+                    remote_url: "git@github.com:dasch-swiss/dsp-api.git".to_string(),
+                },
+            ],
+        };
+
+        let matched = generate_agent_files(&config, &ws_path, &manifest).unwrap();
+        // Only "pkm" matches — "unrelated" is in config but not in manifest,
+        // and "dsp-api" is in manifest but not in config.
+        assert_eq!(matched.len(), 1);
+        assert_eq!(matched[0].repo, "pkm");
+        assert_eq!(matched[0].workflow, Workflow::Push);
     }
 }

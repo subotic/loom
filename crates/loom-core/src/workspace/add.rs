@@ -14,7 +14,7 @@ pub fn add_repo(
     ws_path: &Path,
     manifest: &mut WorkspaceManifest,
     repo: &RepoEntry,
-) -> Result<()> {
+) -> Result<Vec<crate::agent::MatchedRepoConfig>> {
     // Check if repo already in workspace
     if manifest.repos.iter().any(|r| r.name == repo.name) {
         anyhow::bail!(
@@ -30,10 +30,7 @@ pub fn add_repo(
 
     // Fetch latest state from origin (non-fatal)
     if let Err(e) = git_repo.fetch() {
-        eprintln!(
-            "  Warning: could not fetch '{}': {}. Using local state.",
-            repo.name, e
-        );
+        tracing::warn!(repo = %repo.name, error = %e, "could not fetch, using local state");
     }
 
     // Determine base branch
@@ -99,9 +96,9 @@ pub fn add_repo(
     manifest::write_global_state(&state_path, &state)?;
 
     // Regenerate agent files (CLAUDE.md, .claude/settings.json)
-    crate::agent::generate_agent_files(config, ws_path, manifest)?;
+    let applied = crate::agent::generate_agent_files(config, ws_path, manifest)?;
 
-    Ok(())
+    Ok(applied)
 }
 
 #[cfg(test)]

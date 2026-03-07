@@ -17,7 +17,7 @@ pub fn remove_repo(
     manifest: &mut WorkspaceManifest,
     repo_name: &str,
     force: bool,
-) -> Result<()> {
+) -> Result<Vec<crate::agent::MatchedRepoConfig>> {
     // Find the repo
     let repo_idx = manifest
         .repos
@@ -79,9 +79,9 @@ pub fn remove_repo(
     manifest::write_global_state(&state_path, &state)?;
 
     // Regenerate agent files (CLAUDE.md, .claude/settings.json)
-    crate::agent::generate_agent_files(config, ws_path, manifest)?;
+    let applied = crate::agent::generate_agent_files(config, ws_path, manifest)?;
 
-    Ok(())
+    Ok(applied)
 }
 
 #[cfg(test)]

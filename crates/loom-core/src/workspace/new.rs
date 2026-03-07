@@ -16,6 +16,7 @@ pub struct NewWorkspaceResult {
     pub branch: String,
     pub repos_added: usize,
     pub repos_failed: Vec<(String, String)>, // (name, error message)
+    pub matched_configs: Vec<crate::agent::MatchedRepoConfig>,
 }
 
 /// Options for creating a new workspace.
@@ -58,10 +59,7 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
             let git_repo = GitRepo::new(&repo.path);
             // Fetch so remote refs are available for validation
             if let Err(e) = git_repo.fetch() {
-                eprintln!(
-                    "  Warning: could not fetch '{}': {}. Using local state.",
-                    repo.name, e
-                );
+                tracing::warn!(repo = %repo.name, error = %e, "could not fetch, using local state");
             }
             if !git_repo.ref_exists(base)? {
                 let hint = if !base.contains('/') {
@@ -160,7 +158,7 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
     manifest::write_manifest(&ws_path.join(super::MANIFEST_FILENAME), &ws_manifest)?;
 
     // Generate agent files (CLAUDE.md, .claude/settings.json)
-    crate::agent::generate_agent_files(config, &ws_path, &ws_manifest)?;
+    let matched_configs = crate::agent::generate_agent_files(config, &ws_path, &ws_manifest)?;
 
     Ok(NewWorkspaceResult {
         path: ws_path,
@@ -168,6 +166,7 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
         branch: branch_name,
         repos_added,
         repos_failed,
+        matched_configs,
     })
 }
 
@@ -183,10 +182,7 @@ fn add_repo_to_workspace(
 
     // Fetch latest state from origin (non-fatal)
     if let Err(e) = git_repo.fetch() {
-        eprintln!(
-            "  Warning: could not fetch '{}': {}. Using local state.",
-            repo.name, e
-        );
+        tracing::warn!(repo = %repo.name, error = %e, "could not fetch, using local state");
     }
 
     // Determine base branch
