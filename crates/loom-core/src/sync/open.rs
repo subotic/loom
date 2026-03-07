@@ -19,6 +19,7 @@ pub struct OpenResult {
     pub repos_cloned: Vec<String>,
     pub repos_failed: Vec<(String, String)>,
     pub warnings: Vec<String>,
+    pub matched_configs: Vec<crate::agent::MatchedRepoConfig>,
 }
 
 /// Open (reconstruct) a workspace from a sync manifest.
@@ -43,10 +44,7 @@ pub fn open_workspace(config: &Config, name: &str) -> Result<OpenResult> {
     // Pull sync repo (best effort — may fail if no remote configured)
     let sync_git = GitRepo::new(&sync_config.repo);
     if let Err(e) = sync_git.pull_rebase() {
-        eprintln!(
-            "Warning: Could not pull sync repo ({}). Using local copy.",
-            e
-        );
+        tracing::warn!(error = %e, "could not pull sync repo, using local copy");
     }
 
     // Read sync manifest
@@ -154,7 +152,7 @@ pub fn open_workspace(config: &Config, name: &str) -> Result<OpenResult> {
     manifest::write_manifest(&ws_path.join(MANIFEST_FILENAME), &ws_manifest)?;
 
     // Generate agent files
-    crate::agent::generate_agent_files(config, &ws_path, &ws_manifest)?;
+    let matched_configs = crate::agent::generate_agent_files(config, &ws_path, &ws_manifest)?;
 
     // Update state.json
     let state_path = config.workspace.root.join(".loom").join("state.json");
@@ -175,6 +173,7 @@ pub fn open_workspace(config: &Config, name: &str) -> Result<OpenResult> {
         repos_cloned,
         repos_failed,
         warnings,
+        matched_configs,
     })
 }
 

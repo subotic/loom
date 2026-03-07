@@ -89,7 +89,7 @@ pub fn teardown_workspace(
     // Remove successfully removed repos from manifest
     manifest.repos.retain(|r| !removed.contains(&r.name));
 
-    if manifest.repos.is_empty() {
+    let matched_configs = if manifest.repos.is_empty() {
         // Full teardown: remove workspace directory and state entry
         std::fs::remove_dir_all(ws_path).ok();
 
@@ -97,6 +97,8 @@ pub fn teardown_workspace(
         let mut state = manifest::read_global_state(&state_path);
         state.remove(&manifest.name);
         manifest::write_global_state(&state_path, &state)?;
+
+        Vec::new()
     } else {
         // Partial teardown: update manifest with remaining repos
         manifest::write_manifest(&ws_path.join(MANIFEST_FILENAME), manifest)?;
@@ -112,13 +114,14 @@ pub fn teardown_workspace(
         manifest::write_global_state(&state_path, &state)?;
 
         // Regenerate agent files for remaining repos
-        crate::agent::generate_agent_files(config, ws_path, manifest)?;
-    }
+        crate::agent::generate_agent_files(config, ws_path, manifest)?
+    };
 
     Ok(TeardownResult {
         removed,
         failed,
         remaining: manifest.repos.iter().map(|r| r.name.clone()).collect(),
+        matched_configs,
     })
 }
 
@@ -128,6 +131,7 @@ pub struct TeardownResult {
     pub removed: Vec<String>,
     pub failed: Vec<(String, String)>,
     pub remaining: Vec<String>,
+    pub matched_configs: Vec<crate::agent::MatchedRepoConfig>,
 }
 
 #[cfg(test)]

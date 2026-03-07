@@ -269,6 +269,15 @@ pub enum Workflow {
     Push,
 }
 
+impl std::fmt::Display for Workflow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Workflow::Pr => write!(f, "pr"),
+            Workflow::Push => write!(f, "push"),
+        }
+    }
+}
+
 impl Workflow {
     /// Human-readable label for the repos table (e.g., "PR to `main`").
     pub fn label(self, default_branch: &str) -> String {
