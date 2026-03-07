@@ -278,11 +278,27 @@ fn build_sandbox_json(
         &sandbox.network.allowed_domains,
         preset.map_or(&[], |p| &p.sandbox.network.allowed_domains),
     );
-    if !allowed_domains.is_empty() {
-        obj.insert(
-            "network".to_string(),
-            serde_json::json!({ "allowedDomains": allowed_domains }),
-        );
+    // Unix socket paths go to the network proxy, not the filesystem sandbox,
+    // so use merge_sorted (no // prefix conversion), not merge_sandbox_paths.
+    let allow_unix_sockets = merge_sorted(
+        &sandbox.network.allow_unix_sockets,
+        preset.map_or(&[], |p| &p.sandbox.network.allow_unix_sockets),
+    );
+    if !allowed_domains.is_empty() || !allow_unix_sockets.is_empty() {
+        let mut net_obj = serde_json::Map::new();
+        if !allowed_domains.is_empty() {
+            net_obj.insert(
+                "allowedDomains".to_string(),
+                serde_json::json!(allowed_domains),
+            );
+        }
+        if !allow_unix_sockets.is_empty() {
+            net_obj.insert(
+                "allowUnixSockets".to_string(),
+                serde_json::json!(allow_unix_sockets),
+            );
+        }
+        obj.insert("network".to_string(), serde_json::Value::Object(net_obj));
     }
 
     obj
@@ -707,6 +723,7 @@ mod tests {
                 },
                 network: SandboxNetworkConfig {
                     allowed_domains: vec!["github.com".to_string()],
+                    allow_unix_sockets: vec![],
                 },
             },
             ..Default::default()
@@ -735,6 +752,7 @@ mod tests {
                     },
                     network: SandboxNetworkConfig {
                         allowed_domains: vec!["crates.io".to_string(), "docs.rs".to_string()],
+                        allow_unix_sockets: vec![],
                     },
                 },
             },
@@ -758,6 +776,7 @@ mod tests {
                 },
                 network: SandboxNetworkConfig {
                     allowed_domains: vec!["github.com".to_string()],
+                    allow_unix_sockets: vec![],
                 },
             },
             presets,
@@ -784,6 +803,7 @@ mod tests {
                     },
                     network: SandboxNetworkConfig {
                         allowed_domains: vec!["docs.rs".to_string()],
+                        allow_unix_sockets: vec!["/tmp/preset.sock".to_string()],
                     },
                 },
             },
@@ -813,12 +833,33 @@ mod tests {
                 },
                 network: SandboxNetworkConfig {
                     allowed_domains: vec!["github.com".to_string()],
+                    allow_unix_sockets: vec!["/tmp/global.sock".to_string()],
                 },
             },
             presets,
         };
 
         let content = generate_settings(&manifest, &cc_config, Some("rust"));
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_with_unix_sockets_snapshot() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            sandbox: SandboxConfig {
+                enabled: Some(true),
+                network: SandboxNetworkConfig {
+                    allowed_domains: vec!["github.com".to_string()],
+                    allow_unix_sockets: vec![
+                        "/Users/me/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh".to_string(),
+                    ],
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
         insta::assert_snapshot!(content);
     }
 
