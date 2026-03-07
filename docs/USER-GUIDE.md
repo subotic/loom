@@ -620,6 +620,7 @@ allowed_tools = [                          # Global tool allowlist
     "WebFetch(domain:docs.rs)",
 ]
 enabled_plugins = ["my-plugin@my-marketplace"]
+enabled_mcp_servers = ["linear", "notion"]
 extra_known_marketplaces = [
     { name = "my-marketplace", repo = "owner/plugins-repo" },
 ]
@@ -730,6 +731,7 @@ frontend = ["dsp-app", "dsp-dashboard"]
 | `effort_level` | `string` | — | Adaptive reasoning effort level. Valid: `"low"`, `"medium"`, `"high"`. Only affects Opus 4.6 / Sonnet 4.6. |
 | `allowed_tools` | `string[]` | `[]` | Global tool allowlist. Format: `ToolName(specifier)`. See [Permission Pattern Syntax](#permission-pattern-syntax). |
 | `enabled_plugins` | `string[]` | `[]` | Plugins to enable. Format: `"pluginName@marketplaceName"`. |
+| `enabled_mcp_servers` | `string[]` | `[]` | MCP JSON servers to enable in the workspace. Maps to `enabledMcpjsonServers` in settings.json. |
 | `extra_known_marketplaces` | `table[]` | `[]` | Additional plugin marketplace sources. Each entry: `{ name = "...", repo = "owner/repo" }`. |
 
 > **Warning:** If any `enabled_plugins` key is wrong or the marketplace isn't registered, the plugin silently won't load. Verify plugin activation after config changes.
@@ -1125,6 +1127,7 @@ The workspace root gets a `CLAUDE.md` containing:
 | `allowed_tools` + preset | `permissions.allow` |
 | `sandbox.*` | `sandbox.*` (camelCase mapped) |
 | `enabled_plugins` | `enabledPlugins` (map of name → `true`) |
+| `enabled_mcp_servers` | `enabledMcpjsonServers` |
 | `extra_known_marketplaces` | `extraKnownMarketplaces` |
 
 > **Path convention:** Claude Code's sandbox interprets `/path` as relative to the settings file directory, not as an absolute path. LOOM automatically converts absolute paths to `//path` (filesystem-root-absolute) and `~/path` (home-relative) paths pass through unchanged. Additionally, when `sandbox.enabled = true`, LOOM auto-injects each original repo's `.git` directory into `allowWrite` so git worktree operations can access shared state.

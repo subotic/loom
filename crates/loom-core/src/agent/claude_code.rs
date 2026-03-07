@@ -339,6 +339,10 @@ fn generate_settings(
         obj["enabledPlugins"] = serde_json::Value::Object(plugins);
     }
 
+    if !cc_config.enabled_mcp_servers.is_empty() {
+        obj["enabledMcpjsonServers"] = serde_json::json!(cc_config.enabled_mcp_servers);
+    }
+
     // Resolve the preset (if any). Upstream callers (generate_agent_files,
     // create_workspace, run_refresh) validate the preset exists via
     // validate_preset_exists() before reaching here. A miss falls back to
@@ -510,6 +514,7 @@ mod tests {
         // No extra keys when config is empty
         assert!(parsed.get("extraKnownMarketplaces").is_none());
         assert!(parsed.get("enabledPlugins").is_none());
+        assert!(parsed.get("enabledMcpjsonServers").is_none());
     }
 
     #[test]
@@ -792,6 +797,7 @@ mod tests {
                 repo: "org/test-plugins".to_string(),
             }],
             enabled_plugins: vec!["pkm@test-marketplace".to_string()],
+            enabled_mcp_servers: vec!["linear".to_string(), "notion".to_string()],
             allowed_tools: vec!["Bash(gh issue *)".to_string()],
             sandbox: SandboxConfig {
                 enabled: Some(true),
@@ -810,10 +816,20 @@ mod tests {
                 },
             },
             presets,
-            ..Default::default()
         };
 
         let content = generate_settings(&manifest, &cc_config, Some("rust"));
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_with_mcp_servers_snapshot() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            enabled_mcp_servers: vec!["linear".to_string(), "notion".to_string()],
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
         insta::assert_snapshot!(content);
     }
 
