@@ -72,6 +72,7 @@ pub fn build_claude_code_config(flavor: SecurityFlavor) -> ClaudeCodeConfig {
                 filesystem: SandboxFilesystemConfig::default(),
                 network: SandboxNetworkConfig {
                     allowed_domains: vec!["github.com".to_string()],
+                    allow_unix_sockets: vec![],
                 },
                 ..Default::default()
             },
@@ -92,6 +93,7 @@ pub fn build_claude_code_config(flavor: SecurityFlavor) -> ClaudeCodeConfig {
                 filesystem: SandboxFilesystemConfig::default(),
                 network: SandboxNetworkConfig {
                     allowed_domains: vec!["github.com".to_string()],
+                    allow_unix_sockets: vec![],
                 },
                 ..Default::default()
             },
@@ -114,6 +116,7 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 #
 # [agents.claude-code.presets.rust.sandbox.network]
 # allowed_domains = [\"docs.rs\", \"crates.io\"]
+# allow_unix_sockets = [\"/path/to/ssh-agent.sock\"]
 "
         }
         SecurityFlavor::Permissions => {
@@ -145,6 +148,7 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 #
 # [agents.claude-code.presets.rust.sandbox.network]
 # allowed_domains = [\"docs.rs\", \"crates.io\"]
+# allow_unix_sockets = [\"/path/to/ssh-agent.sock\"]
 "
         }
         SecurityFlavor::Skip => {
@@ -163,6 +167,7 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 #
 # [agents.claude-code.sandbox.network]
 # allowed_domains = [\"github.com\"]
+# allow_unix_sockets = [\"/path/to/ssh-agent.sock\"]
 #
 # Permissions — explicit tool allowlists:
 # [agents.claude-code]
@@ -187,6 +192,7 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 #
 # [agents.claude-code.presets.rust.sandbox.network]
 # allowed_domains = [\"docs.rs\", \"crates.io\"]
+# allow_unix_sockets = [\"/path/to/ssh-agent.sock\"]
 "
         }
     }

@@ -45,6 +45,10 @@ expression: content
       ]
     },
     "network": {
+      "allowUnixSockets": [
+        "/tmp/global.sock",
+        "/tmp/preset.sock"
+      ],
       "allowedDomains": [
         "docs.rs",
         "github.com"

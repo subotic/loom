@@ -107,11 +107,13 @@ impl SandboxFilesystemConfig {
 pub struct SandboxNetworkConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allowed_domains: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow_unix_sockets: Vec<String>,
 }
 
 impl SandboxNetworkConfig {
     pub(crate) fn is_empty(&self) -> bool {
-        self.allowed_domains.is_empty()
+        self.allowed_domains.is_empty() && self.allow_unix_sockets.is_empty()
     }
 }
 
@@ -405,6 +407,29 @@ fn validate_sandbox_entries(
         &net.allowed_domains,
         &format!("{context}.sandbox.network.allowed_domains"),
     )?;
+    validate_no_empty_entries(
+        &net.allow_unix_sockets,
+        &format!("{context}.sandbox.network.allow_unix_sockets"),
+    )?;
+    validate_no_duplicates(
+        &net.allow_unix_sockets,
+        &format!("{context}.sandbox.network.allow_unix_sockets"),
+    )?;
+    for entry in &net.allow_unix_sockets {
+        if !entry.starts_with('/') {
+            anyhow::bail!(
+                "{context}.sandbox.network.allow_unix_sockets: '{}' must be an absolute path",
+                entry
+            );
+        }
+        let p = Path::new(entry);
+        if p.components().any(|c| c == std::path::Component::ParentDir) {
+            anyhow::bail!(
+                "{context}.sandbox.network.allow_unix_sockets: '{}' must not contain '..' components",
+                entry
+            );
+        }
+    }
     Ok(())
 }
 
@@ -1237,6 +1262,7 @@ enabled = ["claude-code"]
                         },
                         network: SandboxNetworkConfig {
                             allowed_domains: vec!["github.com".to_string()],
+                            allow_unix_sockets: vec!["/tmp/ssh-agent.sock".to_string()],
                         },
                     },
                     ..Default::default()
@@ -1269,6 +1295,7 @@ enabled = ["claude-code"]
                     },
                     network: SandboxNetworkConfig {
                         allowed_domains: vec!["docs.rs".to_string(), "crates.io".to_string()],
+                        allow_unix_sockets: vec![],
                     },
                 },
             },
@@ -1466,6 +1493,139 @@ enabled = ["claude-code"]
     }
 
     #[test]
+    fn test_validate_allow_unix_sockets_empty_entry() {
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    sandbox: SandboxConfig {
+                        network: SandboxNetworkConfig {
+                            allow_unix_sockets: vec!["  ".to_string()],
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            },
+        };
+
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(err.to_string().contains("empty or whitespace"));
+        assert!(err.to_string().contains("allow_unix_sockets"));
+    }
+
+    #[test]
+    fn test_validate_allow_unix_sockets_duplicate() {
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    sandbox: SandboxConfig {
+                        network: SandboxNetworkConfig {
+                            allow_unix_sockets: vec![
+                                "/tmp/sock".to_string(),
+                                "/tmp/sock".to_string(),
+                            ],
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            },
+        };
+
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(err.to_string().contains("duplicate"));
+        assert!(err.to_string().contains("allow_unix_sockets"));
+    }
+
+    #[test]
+    fn test_validate_allow_unix_sockets_relative_path() {
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    sandbox: SandboxConfig {
+                        network: SandboxNetworkConfig {
+                            allow_unix_sockets: vec!["relative/path.sock".to_string()],
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            },
+        };
+
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(err.to_string().contains("must be an absolute path"));
+    }
+
+    #[test]
+    fn test_validate_allow_unix_sockets_parent_dir() {
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    sandbox: SandboxConfig {
+                        network: SandboxNetworkConfig {
+                            allow_unix_sockets: vec!["/tmp/../etc/sock".to_string()],
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            },
+        };
+
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(err.to_string().contains("must not contain '..'"));
+    }
+
+    #[test]
     fn test_validate_enabled_mcp_servers_empty_entry() {
         let config = Config {
             registry: RegistryConfig { scan_roots: vec![] },
@@ -1571,6 +1731,7 @@ enabled = ["claude-code"]
                     },
                     network: SandboxNetworkConfig {
                         allowed_domains: vec!["docs.rs".to_string()],
+                        allow_unix_sockets: vec!["/tmp/preset.sock".to_string()],
                     },
                 },
             },
@@ -1612,6 +1773,7 @@ enabled = ["claude-code"]
                         },
                         network: SandboxNetworkConfig {
                             allowed_domains: vec!["github.com".to_string()],
+                            allow_unix_sockets: vec!["/tmp/global.sock".to_string()],
                         },
                     },
                     presets,

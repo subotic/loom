@@ -640,6 +640,7 @@ deny_read = []
 
 [agents.claude-code.sandbox.network]
 allowed_domains = ["github.com", "docs.rs", "crates.io"]
+allow_unix_sockets = ["/path/to/ssh-agent.sock"]
 
 # Named presets — selected per workspace with --preset
 [agents.claude-code.presets.rust]
@@ -759,6 +760,7 @@ frontend = ["dsp-app", "dsp-dashboard"]
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `allowed_domains` | `string[]` | `[]` | Network domains the sandbox allows access to. |
+| `allow_unix_sockets` | `string[]` | `[]` | Unix socket paths that sandboxed commands can connect to (e.g., SSH agent sockets). Maps to `allowUnixSockets` in settings.json. |
 
 #### `[agents.claude-code.presets.<name>]` (Optional)
 
@@ -771,6 +773,7 @@ Named permission presets. See [Permission Presets](#permission-presets) for deta
 | `sandbox.filesystem.deny_write` | `string[]` | Additional write-denied paths (merged with global). |
 | `sandbox.filesystem.deny_read` | `string[]` | Additional read-denied paths (merged with global). |
 | `sandbox.network.allowed_domains` | `string[]` | Additional allowed domains (merged with global). |
+| `sandbox.network.allow_unix_sockets` | `string[]` | Additional Unix socket paths (merged with global). |
 
 ### Example Configurations
 
@@ -1129,8 +1132,9 @@ The workspace root gets a `CLAUDE.md` containing:
 | `enabled_plugins` | `enabledPlugins` (map of name → `true`) |
 | `enabled_mcp_servers` | `enabledMcpjsonServers` |
 | `extra_known_marketplaces` | `extraKnownMarketplaces` |
+| `sandbox.network.allow_unix_sockets` | `sandbox.network.allowUnixSockets` |
 
-> **Path convention:** Claude Code's sandbox interprets `/path` as relative to the settings file directory, not as an absolute path. LOOM automatically converts absolute paths to `//path` (filesystem-root-absolute) and `~/path` (home-relative) paths pass through unchanged. Additionally, when `sandbox.enabled = true`, LOOM auto-injects each original repo's `.git` directory into `allowWrite` so git worktree operations can access shared state.
+> **Path convention:** Claude Code's sandbox interprets `/path` as relative to the settings file directory, not as an absolute path. LOOM automatically converts absolute paths to `//path` (filesystem-root-absolute) and `~/path` (home-relative) paths pass through unchanged. Additionally, when `sandbox.enabled = true`, LOOM auto-injects each original repo's `.git` directory into `allowWrite` so git worktree operations can access shared state. Note: `allowUnixSockets` paths are **not** subject to the `//` prefix conversion — they are passed to the network proxy, not the filesystem sandbox.
 
 ### Plugin Configuration
 
