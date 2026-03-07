@@ -19,3 +19,4 @@ clap_complete.workspace = true
 dialoguer.workspace = true
 shellexpand.workspace = true
 toml.workspace = true
+tracing-subscriber.workspace = true

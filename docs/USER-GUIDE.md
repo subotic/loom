@@ -201,7 +201,12 @@ Everything else is optional. See [Configuration Reference](#configuration-refere
 
 > **Workspace resolution:** Most commands auto-detect the current workspace by walking up from your working directory looking for `.loom.json`. Commands with a `[NAME]` argument let you override this.
 
-> **Global flags:** `--no-color`, `--verbose` (`-v`), `--quiet` (`-q`), and `--json` are defined but **not yet functional** (planned). The `NO_COLOR` environment variable is also recognized but not yet wired up.
+> **Global flags:**
+> - `-v` / `--verbose` — show debug-level output (skipped repo config entries, internal diagnostics). Use `-vv` for trace-level output.
+> - `-q` / `--quiet` — suppress all output except errors.
+> - `RUST_LOG=debug` — environment variable that overrides the verbosity flag (e.g., `RUST_LOG=loom_core=trace`).
+> - `--no-color` / `NO_COLOR` — disable colored output (not yet wired to log output).
+> - `--json` — machine-readable output (planned).
 
 ### `loom init`
 
