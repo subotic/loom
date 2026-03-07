@@ -8,6 +8,10 @@ expression: content
     "/loom/my-feature/dsp-das"
   ],
   "effortLevel": "high",
+  "enabledMcpjsonServers": [
+    "linear",
+    "notion"
+  ],
   "enabledPlugins": {
     "pkm@test-marketplace": true
   },

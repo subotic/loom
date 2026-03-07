@@ -106,7 +106,9 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
     match flavor {
         SecurityFlavor::Sandbox => {
             "\
-\n# Named presets — select per workspace with: loom new my-ws --preset rust
+\n# enabled_mcp_servers = [\"linear\", \"notion\"]
+#
+# Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust.sandbox.filesystem]
 # allow_write = [\"~/.cargo\"]
 #
@@ -116,7 +118,9 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
         }
         SecurityFlavor::Permissions => {
             "\
-\n# Named presets — select per workspace with: loom new my-ws --preset rust
+\n# enabled_mcp_servers = [\"linear\", \"notion\"]
+#
+# Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust]
 # allowed_tools = [
 #     \"Bash(cargo test *)\",
@@ -127,7 +131,9 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
         }
         SecurityFlavor::Both => {
             "\
-\n# Named presets — select per workspace with: loom new my-ws --preset rust
+\n# enabled_mcp_servers = [\"linear\", \"notion\"]
+#
+# Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust]
 # allowed_tools = [
 #     \"Bash(cargo test *)\",
@@ -166,6 +172,7 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 #     \"Bash(gh issue *)\",
 #     \"Bash(gh run *)\",
 # ]
+# enabled_mcp_servers = [\"linear\", \"notion\"]
 #
 # Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust]

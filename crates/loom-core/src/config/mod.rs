@@ -201,6 +201,10 @@ pub struct ClaudeCodeConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub enabled_plugins: Vec<String>,
 
+    /// MCP JSON servers to enable (e.g., ["linear", "notion"])
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub enabled_mcp_servers: Vec<String>,
+
     /// Global permission allowlist entries (e.g., ["Bash(cargo test *)"])
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allowed_tools: Vec<String>,
@@ -221,6 +225,7 @@ impl ClaudeCodeConfig {
             && self.effort_level.is_none()
             && self.extra_known_marketplaces.is_empty()
             && self.enabled_plugins.is_empty()
+            && self.enabled_mcp_servers.is_empty()
             && self.allowed_tools.is_empty()
             && self.sandbox.is_empty()
             && self.presets.is_empty()
@@ -531,6 +536,14 @@ impl Config {
         validate_no_empty_entries(
             &cc.sandbox.excluded_commands,
             "agents.claude-code.sandbox.excluded_commands",
+        )?;
+        validate_no_empty_entries(
+            &cc.enabled_mcp_servers,
+            "agents.claude-code.enabled_mcp_servers",
+        )?;
+        validate_no_duplicates(
+            &cc.enabled_mcp_servers,
+            "agents.claude-code.enabled_mcp_servers",
         )?;
         for (name, preset) in &cc.presets {
             let ctx = format!("agents.claude-code.presets.{name}");
@@ -863,6 +876,7 @@ root = "/loom"
                         "pkm@my-plugins".to_string(),
                         "eng@team-plugins".to_string(),
                     ],
+                    enabled_mcp_servers: vec!["linear".to_string(), "notion".to_string()],
                     ..Default::default()
                 },
             },
@@ -878,6 +892,10 @@ root = "/loom"
         assert_eq!(
             parsed.agents.claude_code.enabled_plugins,
             config.agents.claude_code.enabled_plugins
+        );
+        assert_eq!(
+            parsed.agents.claude_code.enabled_mcp_servers,
+            config.agents.claude_code.enabled_mcp_servers
         );
     }
 
@@ -1448,6 +1466,60 @@ enabled = ["claude-code"]
     }
 
     #[test]
+    fn test_validate_enabled_mcp_servers_empty_entry() {
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    enabled_mcp_servers: vec!["".to_string()],
+                    ..Default::default()
+                },
+            },
+        };
+
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(err.to_string().contains("empty or whitespace"));
+        assert!(err.to_string().contains("enabled_mcp_servers"));
+    }
+
+    #[test]
+    fn test_validate_enabled_mcp_servers_duplicates() {
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    enabled_mcp_servers: vec!["linear".to_string(), "linear".to_string()],
+                    ..Default::default()
+                },
+            },
+        };
+
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(err.to_string().contains("duplicate"));
+        assert!(err.to_string().contains("enabled_mcp_servers"));
+    }
+
+    #[test]
     fn test_validate_preset_invalid_permission() {
         let dir = tempfile::tempdir().unwrap();
         let mut presets = BTreeMap::new();
@@ -1525,6 +1597,7 @@ enabled = ["claude-code"]
                         repo: "org/test".to_string(),
                     }],
                     enabled_plugins: vec!["eng@test".to_string()],
+                    enabled_mcp_servers: vec!["linear".to_string()],
                     allowed_tools: vec!["Bash(gh issue *)".to_string()],
                     sandbox: SandboxConfig {
                         enabled: Some(true),
