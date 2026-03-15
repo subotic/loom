@@ -84,11 +84,16 @@ pub fn generate_agent_files(
             }
         };
 
-        // Clean up legacy files from previous versions
+        // Clean up legacy and conditional files before regeneration
         if agent_name == "claude-code" {
             let legacy = ws_path.join(".claude/settings.local.json");
             if legacy.exists() {
                 std::fs::remove_file(&legacy)?;
+            }
+            // Remove stale .mcp.json if MCP servers were removed from config
+            let mcp_json = ws_path.join(".mcp.json");
+            if mcp_json.exists() {
+                std::fs::remove_file(&mcp_json)?;
             }
         }
 

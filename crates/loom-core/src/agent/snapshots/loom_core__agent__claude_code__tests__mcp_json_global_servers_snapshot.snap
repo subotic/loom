@@ -1,0 +1,14 @@
+---
+source: crates/loom-core/src/agent/claude_code.rs
+expression: content
+---
+{
+  "mcpServers": {
+    "linear": {
+      "args": [
+        "@anthropic/linear-mcp"
+      ],
+      "command": "npx"
+    }
+  }
+}

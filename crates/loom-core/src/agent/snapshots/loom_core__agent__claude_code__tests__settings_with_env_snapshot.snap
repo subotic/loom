@@ -1,0 +1,13 @@
+---
+source: crates/loom-core/src/agent/claude_code.rs
+expression: content
+---
+{
+  "additionalDirectories": [
+    "/loom/my-feature/dsp-api",
+    "/loom/my-feature/dsp-das"
+  ],
+  "env": {
+    "GIT_SSH_COMMAND": "ssh"
+  }
+}

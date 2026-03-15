@@ -109,11 +109,15 @@ pub struct SandboxNetworkConfig {
     pub allowed_domains: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allow_unix_sockets: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_local_binding: Option<bool>,
 }
 
 impl SandboxNetworkConfig {
     pub(crate) fn is_empty(&self) -> bool {
-        self.allowed_domains.is_empty() && self.allow_unix_sockets.is_empty()
+        self.allowed_domains.is_empty()
+            && self.allow_unix_sockets.is_empty()
+            && self.allow_local_binding.is_none()
     }
 }
 
@@ -149,7 +153,7 @@ impl SandboxConfig {
     }
 }
 
-/// Sandbox settings within a preset (arrays only, no booleans).
+/// Sandbox settings within a preset (arrays + `allow_local_binding` fallback; no top-level booleans).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PresetSandboxConfig {
@@ -165,6 +169,20 @@ impl PresetSandboxConfig {
     }
 }
 
+/// An MCP server definition (stdio or SSE).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct McpServerConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<BTreeMap<String, String>>,
+}
+
 /// A named permission preset (e.g., "rust", "node").
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -173,6 +191,8 @@ pub struct PermissionPreset {
     pub allowed_tools: Vec<String>,
     #[serde(default, skip_serializing_if = "PresetSandboxConfig::is_empty")]
     pub sandbox: PresetSandboxConfig,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub mcp_servers: BTreeMap<String, McpServerConfig>,
 }
 
 /// Effort level for adaptive reasoning (Opus 4.6 / Sonnet 4.6 only).
@@ -215,6 +235,14 @@ pub struct ClaudeCodeConfig {
     #[serde(default, skip_serializing_if = "SandboxConfig::is_empty")]
     pub sandbox: SandboxConfig,
 
+    /// Environment variables to set in Claude Code sessions
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, String>,
+
+    /// MCP server definitions (stdio or SSE)
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub mcp_servers: BTreeMap<String, McpServerConfig>,
+
     /// Named permission presets (selected per workspace via --preset)
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub presets: BTreeMap<String, PermissionPreset>,
@@ -230,6 +258,8 @@ impl ClaudeCodeConfig {
             && self.enabled_mcp_servers.is_empty()
             && self.allowed_tools.is_empty()
             && self.sandbox.is_empty()
+            && self.env.is_empty()
+            && self.mcp_servers.is_empty()
             && self.presets.is_empty()
     }
 }
@@ -332,11 +362,16 @@ pub fn validate_preset_exists(
     }
 }
 
-/// Validate a Claude Code permission entry has the form `ToolName(specifier)`.
+/// Validate a Claude Code permission entry has the form `ToolName(specifier)`
+/// or is a bare MCP tool name (e.g., `mcp__sentry__find_organizations`).
 fn validate_permission_entry(entry: &str, context: &str) -> Result<()> {
     let trimmed = entry.trim();
     if trimmed.is_empty() {
         anyhow::bail!("{context}: permission entry cannot be empty");
+    }
+    // Bare MCP tool names are valid (e.g., "mcp__sentry__find_organizations")
+    if trimmed.starts_with("mcp__") && !trimmed.contains('(') {
+        return Ok(());
     }
     if !trimmed.ends_with(')') || !trimmed.contains('(') {
         anyhow::bail!("{context}: invalid format '{trimmed}' — expected ToolName(specifier)");
@@ -438,6 +473,47 @@ fn validate_sandbox_entries(
                 entry
             );
         }
+    }
+    Ok(())
+}
+
+/// Validate that environment variable keys are non-empty and contain no `=` or NUL characters.
+fn validate_env_keys(env: &BTreeMap<String, String>, context: &str) -> Result<()> {
+    for key in env.keys() {
+        if key.trim().is_empty() {
+            anyhow::bail!("{context}: key cannot be empty or whitespace-only");
+        }
+        if key.contains('=') || key.contains('\0') {
+            anyhow::bail!(
+                "{context}: key '{}' contains invalid character ('=' or NUL)",
+                key
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Validate a single MCP server config (command XOR url, no args on SSE servers).
+fn validate_mcp_server(server: &McpServerConfig, context: &str) -> Result<()> {
+    match (&server.command, &server.url) {
+        (Some(_), Some(_)) => anyhow::bail!("{context}: cannot have both 'command' and 'url'"),
+        (None, None) => anyhow::bail!("{context}: must have either 'command' or 'url'"),
+        (Some(cmd), None) => {
+            if cmd.trim().is_empty() {
+                anyhow::bail!("{context}: 'command' cannot be empty or whitespace-only");
+            }
+        }
+        (None, Some(url)) => {
+            if url.trim().is_empty() {
+                anyhow::bail!("{context}: 'url' cannot be empty or whitespace-only");
+            }
+            if server.args.is_some() {
+                anyhow::bail!("{context}: 'args' cannot be used with 'url' (SSE transport)");
+            }
+        }
+    }
+    if let Some(env) = &server.env {
+        validate_env_keys(env, &format!("{context}.env"))?;
     }
     Ok(())
 }
@@ -579,6 +655,11 @@ impl Config {
             &cc.enabled_mcp_servers,
             "agents.claude-code.enabled_mcp_servers",
         )?;
+        validate_env_keys(&cc.env, "agents.claude-code.env")?;
+        // Validate MCP server configs
+        for (name, server) in &cc.mcp_servers {
+            validate_mcp_server(server, &format!("agents.claude-code.mcp_servers.{name}"))?;
+        }
         for (name, preset) in &cc.presets {
             let ctx = format!("agents.claude-code.presets.{name}");
             for entry in &preset.allowed_tools {
@@ -586,6 +667,9 @@ impl Config {
             }
             validate_no_duplicates(&preset.allowed_tools, &format!("{ctx}.allowed_tools"))?;
             validate_sandbox_entries(&preset.sandbox.filesystem, &preset.sandbox.network, &ctx)?;
+            for (srv_name, server) in &preset.mcp_servers {
+                validate_mcp_server(server, &format!("{ctx}.mcp_servers.{srv_name}"))?;
+            }
         }
         Ok(())
     }
@@ -1272,6 +1356,7 @@ enabled = ["claude-code"]
                         network: SandboxNetworkConfig {
                             allowed_domains: vec!["github.com".to_string()],
                             allow_unix_sockets: vec!["/tmp/ssh-agent.sock".to_string()],
+                            allow_local_binding: Some(true),
                         },
                     },
                     ..Default::default()
@@ -1304,9 +1389,10 @@ enabled = ["claude-code"]
                     },
                     network: SandboxNetworkConfig {
                         allowed_domains: vec!["docs.rs".to_string(), "crates.io".to_string()],
-                        allow_unix_sockets: vec![],
+                        ..Default::default()
                     },
                 },
+                ..Default::default()
             },
         );
 
@@ -1392,11 +1478,17 @@ enabled = ["claude-code"]
         assert!(validate_permission_entry("WebFetch(domain:docs.rs)", "test").is_ok());
         assert!(validate_permission_entry("Skill(eng:workflows:plan)", "test").is_ok());
 
+        // Bare MCP tool names are valid
+        assert!(validate_permission_entry("mcp__sentry__find_organizations", "test").is_ok());
+        assert!(validate_permission_entry("mcp__linear__get_issue", "test").is_ok());
+
         // Invalid cases
         assert!(validate_permission_entry("", "test").is_err());
         assert!(validate_permission_entry("   ", "test").is_err());
         assert!(validate_permission_entry("Bash", "test").is_err());
         assert!(validate_permission_entry("bash(cargo test *)", "test").is_err());
+        // Non-mcp bare names are still invalid
+        assert!(validate_permission_entry("invalid_bare_name", "test").is_err());
         // Empty specifier
         assert!(validate_permission_entry("Bash()", "test").is_err());
         assert!(validate_permission_entry("Bash(  )", "test").is_err());
@@ -1741,8 +1833,10 @@ enabled = ["claude-code"]
                     network: SandboxNetworkConfig {
                         allowed_domains: vec!["docs.rs".to_string()],
                         allow_unix_sockets: vec!["/tmp/preset.sock".to_string()],
+                        ..Default::default()
                     },
                 },
+                ..Default::default()
             },
         );
 
@@ -1777,12 +1871,12 @@ enabled = ["claude-code"]
                         enable_weaker_network_isolation: None,
                         filesystem: SandboxFilesystemConfig {
                             allow_write: vec!["~/.config/loom".to_string()],
-                            deny_write: vec![],
-                            deny_read: vec![],
+                            ..Default::default()
                         },
                         network: SandboxNetworkConfig {
                             allowed_domains: vec!["github.com".to_string()],
                             allow_unix_sockets: vec!["/tmp/global.sock".to_string()],
+                            ..Default::default()
                         },
                     },
                     presets,
@@ -2321,5 +2415,405 @@ effort_level = "max"
             ..Default::default()
         };
         assert!(!config.is_empty());
+    }
+
+    #[test]
+    fn test_mcp_server_validation_command_only_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut mcp_servers = BTreeMap::new();
+        mcp_servers.insert(
+            "test".to_string(),
+            McpServerConfig {
+                command: Some("npx".to_string()),
+                ..Default::default()
+            },
+        );
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    mcp_servers,
+                    ..Default::default()
+                },
+            },
+        };
+        assert!(config.validate_agent_config().is_ok());
+    }
+
+    #[test]
+    fn test_mcp_server_validation_url_only_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut mcp_servers = BTreeMap::new();
+        mcp_servers.insert(
+            "test".to_string(),
+            McpServerConfig {
+                url: Some("https://example.com/mcp".to_string()),
+                ..Default::default()
+            },
+        );
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    mcp_servers,
+                    ..Default::default()
+                },
+            },
+        };
+        assert!(config.validate_agent_config().is_ok());
+    }
+
+    #[test]
+    fn test_mcp_server_validation_both_command_and_url_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut mcp_servers = BTreeMap::new();
+        mcp_servers.insert(
+            "bad".to_string(),
+            McpServerConfig {
+                command: Some("npx".to_string()),
+                url: Some("https://example.com".to_string()),
+                ..Default::default()
+            },
+        );
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    mcp_servers,
+                    ..Default::default()
+                },
+            },
+        };
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(err.to_string().contains("cannot have both"));
+    }
+
+    #[test]
+    fn test_mcp_server_validation_neither_command_nor_url_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut mcp_servers = BTreeMap::new();
+        mcp_servers.insert("empty".to_string(), McpServerConfig::default());
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![dir.path().to_path_buf()],
+            },
+            workspace: WorkspaceConfig {
+                root: dir.path().to_path_buf(),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    mcp_servers,
+                    ..Default::default()
+                },
+            },
+        };
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(err.to_string().contains("must have either"));
+    }
+
+    #[test]
+    fn test_mcp_servers_makes_config_non_empty() {
+        let mut mcp_servers = BTreeMap::new();
+        mcp_servers.insert(
+            "test".to_string(),
+            McpServerConfig {
+                command: Some("cmd".to_string()),
+                ..Default::default()
+            },
+        );
+        let config = ClaudeCodeConfig {
+            mcp_servers,
+            ..Default::default()
+        };
+        assert!(!config.is_empty());
+    }
+
+    #[test]
+    fn test_env_makes_config_non_empty() {
+        let mut env = BTreeMap::new();
+        env.insert("GIT_SSH_COMMAND".to_string(), "ssh".to_string());
+        let config = ClaudeCodeConfig {
+            env,
+            ..Default::default()
+        };
+        assert!(!config.is_empty());
+    }
+
+    #[test]
+    fn test_validate_env_key_empty_rejected() {
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    env: {
+                        let mut m = BTreeMap::new();
+                        m.insert("  ".to_string(), "val".to_string());
+                        m
+                    },
+                    ..Default::default()
+                },
+            },
+        };
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(err.to_string().contains("empty or whitespace"));
+    }
+
+    #[test]
+    fn test_validate_env_key_with_equals_rejected() {
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    env: {
+                        let mut m = BTreeMap::new();
+                        m.insert("KEY=VAL".to_string(), "val".to_string());
+                        m
+                    },
+                    ..Default::default()
+                },
+            },
+        };
+        let err = config.validate_agent_config().unwrap_err();
+        assert!(err.to_string().contains("invalid character"));
+    }
+
+    #[test]
+    fn test_validate_env_key_valid_ok() {
+        let config = Config {
+            registry: RegistryConfig { scan_roots: vec![] },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig {
+                enabled: vec!["claude-code".to_string()],
+                claude_code: ClaudeCodeConfig {
+                    env: {
+                        let mut m = BTreeMap::new();
+                        m.insert("GIT_SSH_COMMAND".to_string(), "ssh".to_string());
+                        m
+                    },
+                    ..Default::default()
+                },
+            },
+        };
+        assert!(config.validate_agent_config().is_ok());
+    }
+
+    #[test]
+    fn test_env_toml_round_trip() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+
+[agents.claude-code.env]
+GIT_SSH_COMMAND = "ssh"
+EDITOR = "vim"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.agents.claude_code.env.len(), 2);
+        assert_eq!(config.agents.claude_code.env["GIT_SSH_COMMAND"], "ssh");
+
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        let reparsed: Config = toml::from_str(&serialized).unwrap();
+        assert_eq!(
+            reparsed.agents.claude_code.env,
+            config.agents.claude_code.env
+        );
+    }
+
+    #[test]
+    fn test_mcp_servers_toml_round_trip() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+
+[agents.claude-code.mcp_servers.linear]
+command = "npx"
+args = ["@anthropic/linear-mcp"]
+
+[agents.claude-code.mcp_servers.linear.env]
+TOKEN = "secret"
+
+[agents.claude-code.mcp_servers.grafana]
+url = "https://grafana.example.com/mcp"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.agents.claude_code.mcp_servers.len(), 2);
+        let linear = &config.agents.claude_code.mcp_servers["linear"];
+        assert_eq!(linear.command, Some("npx".to_string()));
+        assert_eq!(linear.env.as_ref().unwrap()["TOKEN"], "secret");
+        let grafana = &config.agents.claude_code.mcp_servers["grafana"];
+        assert_eq!(
+            grafana.url,
+            Some("https://grafana.example.com/mcp".to_string())
+        );
+
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        let reparsed: Config = toml::from_str(&serialized).unwrap();
+        assert_eq!(
+            reparsed.agents.claude_code.mcp_servers,
+            config.agents.claude_code.mcp_servers
+        );
+    }
+
+    #[test]
+    fn test_mcp_server_validation_args_with_url_fails() {
+        assert!(
+            validate_mcp_server(
+                &McpServerConfig {
+                    url: Some("https://example.com".to_string()),
+                    args: Some(vec!["--flag".to_string()]),
+                    ..Default::default()
+                },
+                "test"
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("args")
+        );
+    }
+
+    #[test]
+    fn test_mcp_server_validation_empty_command_fails() {
+        assert!(
+            validate_mcp_server(
+                &McpServerConfig {
+                    command: Some("".to_string()),
+                    ..Default::default()
+                },
+                "test"
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("empty")
+        );
+    }
+
+    #[test]
+    fn test_mcp_server_validation_empty_url_fails() {
+        assert!(
+            validate_mcp_server(
+                &McpServerConfig {
+                    url: Some("  ".to_string()),
+                    ..Default::default()
+                },
+                "test"
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("empty")
+        );
+    }
+
+    #[test]
+    fn test_mcp_server_env_key_validation() {
+        // Valid env key
+        assert!(
+            validate_mcp_server(
+                &McpServerConfig {
+                    command: Some("cmd".to_string()),
+                    env: Some({
+                        let mut m = BTreeMap::new();
+                        m.insert("TOKEN".to_string(), "secret".to_string());
+                        m
+                    }),
+                    ..Default::default()
+                },
+                "test"
+            )
+            .is_ok()
+        );
+
+        // Empty env key
+        assert!(
+            validate_mcp_server(
+                &McpServerConfig {
+                    command: Some("cmd".to_string()),
+                    env: Some({
+                        let mut m = BTreeMap::new();
+                        m.insert("".to_string(), "val".to_string());
+                        m
+                    }),
+                    ..Default::default()
+                },
+                "test"
+            )
+            .is_err()
+        );
     }
 }
