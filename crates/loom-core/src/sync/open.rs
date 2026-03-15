@@ -335,7 +335,7 @@ fn derive_clone_path(config: &Config, remote_url: &str) -> Result<PathBuf> {
 mod tests {
     use super::*;
     use crate::config::{
-        AgentsConfig, DefaultsConfig, RegistryConfig, SyncConfig, WorkspaceConfig,
+        AgentsConfig, DefaultsConfig, RegistryConfig, SyncConfig, UpdateConfig, WorkspaceConfig,
     };
     use std::collections::BTreeMap;
 
@@ -355,6 +355,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let path = derive_clone_path(&config, "git@github.com:dasch-swiss/dsp-api.git").unwrap();
@@ -377,6 +378,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let path = derive_clone_path(&config, "https://github.com/org/repo.git").unwrap();
@@ -397,6 +399,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let result = derive_clone_path(&config, "git@github.com:org/repo.git");
@@ -418,6 +421,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let result = open_workspace(&config, "test-ws");
@@ -471,6 +475,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let result = open_workspace(&config, "nonexistent-ws");

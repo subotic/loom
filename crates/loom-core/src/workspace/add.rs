@@ -104,7 +104,7 @@ pub fn add_repo(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AgentsConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
+    use crate::config::{AgentsConfig, UpdateConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
     use std::collections::BTreeMap;
 
     fn test_config(dir: &Path) -> Config {
@@ -120,6 +120,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         }
     }
 

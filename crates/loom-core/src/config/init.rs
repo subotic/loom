@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 use super::{
     AgentsConfig, ClaudeCodeConfig, Config, DefaultsConfig, RegistryConfig, SandboxConfig,
-    SandboxFilesystemConfig, SandboxNetworkConfig, TerminalConfig, WorkspaceConfig,
+    SandboxFilesystemConfig, SandboxNetworkConfig, TerminalConfig, UpdateConfig, WorkspaceConfig,
 };
 use crate::git;
 
@@ -264,6 +264,7 @@ pub fn create_config(
             enabled: agents,
             claude_code,
         },
+        update: UpdateConfig::default(),
     };
 
     Ok(config)
@@ -572,6 +573,7 @@ mod tests {
                 enabled: vec!["claude-code".to_string()],
                 claude_code: build_claude_code_config(SecurityFlavor::Sandbox),
             },
+        update: UpdateConfig::default(),
         };
 
         save_init_config_to(&config, SecurityFlavor::Sandbox, &config_path).unwrap();
@@ -602,6 +604,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+        update: UpdateConfig::default(),
         };
 
         save_init_config_to(&config, SecurityFlavor::Skip, &config_path).unwrap();
@@ -659,6 +662,7 @@ auto_allow = true
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(), // Doesn't matter — agents section is preserved
+            update: UpdateConfig::default(),
         };
 
         update_non_agent_config_at(&config, &config_path, None).unwrap();
@@ -699,6 +703,7 @@ auto_allow = true
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+        update: UpdateConfig::default(),
         };
 
         // Test directory creation
@@ -779,6 +784,7 @@ auto_allow = true
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+        update: UpdateConfig::default(),
         };
 
         save_init_config_to(&config, SecurityFlavor::Sandbox, &config_path).unwrap();
@@ -829,6 +835,7 @@ enabled = ["claude-code"]
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+        update: UpdateConfig::default(),
         };
 
         update_non_agent_config_at(&config, &config_path, None).unwrap();

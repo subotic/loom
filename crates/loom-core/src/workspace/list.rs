@@ -93,7 +93,7 @@ pub fn list_workspaces(config: &Config) -> Result<Vec<WorkspaceSummary>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AgentsConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
+    use crate::config::{AgentsConfig, UpdateConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
     use crate::manifest::{RepoManifestEntry, WorkspaceIndex, WorkspaceManifest};
     use std::collections::BTreeMap;
 
@@ -110,6 +110,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         }
     }
 

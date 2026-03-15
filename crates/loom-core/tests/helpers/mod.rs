@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use loom_core::config::{AgentsConfig, Config, DefaultsConfig, RegistryConfig, WorkspaceConfig};
+use loom_core::config::{AgentsConfig, UpdateConfig, Config, DefaultsConfig, RegistryConfig, WorkspaceConfig};
 
 /// Create a git repo at the given path with an initial commit.
 pub fn create_test_repo(dir: &Path) -> PathBuf {
@@ -45,6 +45,7 @@ pub fn create_test_config(scan_root: &Path, workspace_root: &Path) -> Config {
         repos: BTreeMap::new(),
         specs: None,
         agents: AgentsConfig::default(),
+        update: UpdateConfig::default(),
     }
 }
 

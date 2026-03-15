@@ -482,7 +482,7 @@ fn generate_settings(
 mod tests {
     use super::*;
     use crate::config::{
-        AgentsConfig, ClaudeCodeConfig, DefaultsConfig, EffortLevel, MarketplaceEntry,
+        AgentsConfig, UpdateConfig, ClaudeCodeConfig, DefaultsConfig, EffortLevel, MarketplaceEntry,
         PermissionPreset, PresetSandboxConfig, RegistryConfig, RepoConfig, SandboxConfig,
         SandboxFilesystemConfig, SandboxNetworkConfig, SpecsConfig, Workflow, WorkspaceConfig,
     };
@@ -531,6 +531,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         }
     }
 

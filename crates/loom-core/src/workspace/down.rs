@@ -137,7 +137,7 @@ pub struct TeardownResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AgentsConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
+    use crate::config::{AgentsConfig, UpdateConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
     use crate::manifest::{RepoManifestEntry, WorkspaceIndex};
     use std::collections::BTreeMap;
 
@@ -154,6 +154,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         }
     }
 
