@@ -860,6 +860,36 @@ mod tests {
         assert_eq!(parsed.defaults.branch_prefix, "loom");
         assert!(parsed.sync.is_some());
         assert!(parsed.terminal.is_some());
+        assert!(parsed.update.enabled);
+    }
+
+    #[test]
+    fn test_update_config_disabled() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+
+[update]
+enabled = false
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(!config.update.enabled);
+    }
+
+    #[test]
+    fn test_update_config_defaults_to_enabled() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(config.update.enabled);
     }
 
     #[test]
