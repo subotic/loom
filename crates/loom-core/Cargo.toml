@@ -25,12 +25,7 @@ toml_edit.workspace = true
 tracing.workspace = true
 
 # Self-update
-self_update = { version = "0.43", default-features = false, features = [
-    "ureq",
-    "rustls",
-    "archive-tar",
-    "compression-flate2",
-] }
+self_update.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

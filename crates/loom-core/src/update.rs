@@ -5,6 +5,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use self_update::cargo_crate_version;
 
+const REPO_OWNER: &str = "subotic";
+const REPO_NAME: &str = "loom";
+const BIN_NAME: &str = "loom";
+
 /// How often to check for updates (in seconds).
 const CHECK_INTERVAL_SECS: u64 = 3600; // 1 hour
 
@@ -18,17 +22,20 @@ pub fn check_and_update(force: bool, show_progress: bool) -> Result<Option<Strin
     if !force && !should_check()? {
         return Ok(None);
     }
-    record_check()?;
 
     let status = self_update::backends::github::Update::configure()
-        .repo_owner("subotic")
-        .repo_name("loom")
-        .bin_name("loom")
+        .repo_owner(REPO_OWNER)
+        .repo_name(REPO_NAME)
+        .bin_name(BIN_NAME)
         .show_download_progress(show_progress)
         .no_confirm(true)
         .current_version(cargo_crate_version!())
         .build()?
         .update()?;
+
+    // Record timestamp after successful check (not before — a failed check
+    // should not consume the hourly window).
+    record_check()?;
 
     if status.updated() {
         Ok(Some(status.version().to_string()))
@@ -44,9 +51,9 @@ pub fn check_version() -> Result<(String, String)> {
     let current = cargo_crate_version!().to_string();
 
     let latest = self_update::backends::github::Update::configure()
-        .repo_owner("subotic")
-        .repo_name("loom")
-        .bin_name("loom")
+        .repo_owner(REPO_OWNER)
+        .repo_name(REPO_NAME)
+        .bin_name(BIN_NAME)
         .current_version(cargo_crate_version!())
         .build()?
         .get_latest_release()?;
@@ -54,8 +61,11 @@ pub fn check_version() -> Result<(String, String)> {
     Ok((current, latest.version))
 }
 
-/// Whether updates are disabled via env var or config.
-pub fn is_disabled() -> bool {
+/// Whether updates are disabled via `LOOM_DISABLE_UPDATE=1` env var.
+///
+/// Note: config-based opt-out (`update.enabled = false`) is checked separately
+/// in `main.rs` after config is loaded.
+pub fn is_disabled_by_env() -> bool {
     std::env::var("LOOM_DISABLE_UPDATE").is_ok_and(|v| v == "1")
 }
 
@@ -95,11 +105,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_is_disabled_default() {
-        // When LOOM_DISABLE_UPDATE is not set, should not be disabled
-        // (can't reliably test env var state in parallel tests,
-        //  so just verify the function doesn't panic)
-        let _ = is_disabled();
+    fn test_is_disabled_by_env_default() {
+        let _ = is_disabled_by_env();
     }
 
     #[test]

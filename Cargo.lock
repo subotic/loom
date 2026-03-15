@@ -1371,6 +1371,7 @@ dependencies = [
  "loom-core",
  "shellexpand",
  "toml",
+ "tracing",
  "tracing-subscriber",
 ]
 

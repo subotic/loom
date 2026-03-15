@@ -62,7 +62,11 @@ LOOM creates **workspaces** — directories where multiple git repositories are 
 ### Installation
 
 ```sh
-cargo install --git https://github.com/subotic/loom.git
+# Pre-built binary (no Rust toolchain needed)
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/subotic/loom/releases/latest/download/loom-cli-installer.sh | sh
+
+# Or from crates.io
+cargo install loom-cli
 ```
 
 ### Scan Root Convention
@@ -702,6 +706,10 @@ allowed_domains = ["docs.rs", "crates.io"]
 # Presets can also define MCP servers (override global servers with the same name)
 [agents.claude-code.presets.rust.mcp_servers.rust-analyzer]
 command = "rust-analyzer-mcp"
+
+# --- Auto-Update ---
+# [update]
+# enabled = false              # Disable auto-update (default: true)
 ```
 
 ### Per-Section Reference
@@ -838,6 +846,14 @@ Named permission presets. See [Permission Presets](#permission-presets) for deta
 | `mcp_servers.<name>` | `table` | Preset-level MCP server definitions. Override global servers with the same name. |
 
 > **Note:** When sandbox is enabled, the generated CLAUDE.md includes guidance instructing the agent to work within sandbox constraints before resorting to `dangerouslyDisableSandbox`.
+
+#### `[update]` (Optional)
+
+Controls the auto-update behavior. When enabled (the default), loom checks for updates once per hour on startup and applies them immediately.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | `bool` | `true` | Whether auto-update is enabled. Set to `false` to disable. Can also be disabled via `LOOM_DISABLE_UPDATE=1` env var. |
 
 ### Example Configurations
 

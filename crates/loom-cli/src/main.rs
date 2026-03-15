@@ -25,15 +25,24 @@ fn main() -> anyhow::Result<()> {
         .init();
 
     // Auto-update check: silent, respects hourly throttle.
-    // Runs after logging init so tracing works, but before cli.run().
-    if !loom_core::update::is_disabled() {
-        match loom_core::update::check_and_update(false, false) {
-            Ok(Some(v)) => {
-                eprintln!("Updated to v{v}. Please restart.");
-                std::process::exit(0);
+    // Checks env var first (fast, no disk I/O), then config file.
+    if !loom_core::update::is_disabled_by_env() {
+        // Check config-based opt-out (loads config from disk)
+        let config_disabled = loom_core::config::Config::load()
+            .map(|c| !c.update.enabled)
+            .unwrap_or(false);
+
+        if !config_disabled {
+            match loom_core::update::check_and_update(false, false) {
+                Ok(Some(v)) => {
+                    eprintln!("Updated to v{v}. Please restart.");
+                    std::process::exit(0);
+                }
+                Ok(None) => {} // up-to-date or throttled
+                Err(e) => {
+                    tracing::debug!("Auto-update check failed: {e}");
+                }
             }
-            Ok(None) => {} // up-to-date or throttled
-            Err(_) => {}   // silent failure
         }
     }
 

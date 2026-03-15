@@ -31,7 +31,7 @@ pub struct Config {
     #[serde(default)]
     pub agents: AgentsConfig,
     /// Auto-update settings.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "UpdateConfig::is_default")]
     pub update: UpdateConfig,
 }
 
@@ -337,7 +337,7 @@ pub struct SpecsConfig {
 }
 
 /// Auto-update settings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdateConfig {
     /// Whether auto-update is enabled (default: true).
     #[serde(default = "default_true")]
@@ -347,6 +347,14 @@ pub struct UpdateConfig {
 impl Default for UpdateConfig {
     fn default() -> Self {
         Self { enabled: true }
+    }
+}
+
+impl UpdateConfig {
+    /// Returns true when the config is at its default value (enabled = true).
+    /// Used by `skip_serializing_if` to omit the `[update]` section when unnecessary.
+    pub fn is_default(&self) -> bool {
+        self.enabled
     }
 }
 

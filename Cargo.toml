@@ -48,5 +48,13 @@ chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Self-update
+self_update = { version = "0.43", default-features = false, features = [
+    "ureq",
+    "rustls",
+    "archive-tar",
+    "compression-flate2",
+] }
+
 # Testing (used as dev-dependency in crates)
 insta = "1.42"
