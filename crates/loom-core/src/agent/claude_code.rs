@@ -1,7 +1,9 @@
+use std::collections::BTreeMap;
+
 use anyhow::Result;
 
 use crate::agent::{AgentGenerator, GeneratedFile};
-use crate::config::{Config, Workflow};
+use crate::config::{ClaudeCodeConfig, Config, Workflow};
 use crate::manifest::WorkspaceManifest;
 
 /// Generates CLAUDE.md and .claude/settings.json for Claude Code.
@@ -24,7 +26,7 @@ impl AgentGenerator for ClaudeCodeGenerator {
             manifest.preset.as_deref(),
         );
 
-        Ok(vec![
+        let mut files = vec![
             GeneratedFile {
                 relative_path: "CLAUDE.md".to_string(),
                 content: claude_md,
@@ -33,7 +35,19 @@ impl AgentGenerator for ClaudeCodeGenerator {
                 relative_path: ".claude/settings.json".to_string(),
                 content: settings,
             },
-        ])
+        ];
+
+        // Generate .mcp.json if MCP servers are configured
+        if let Some(mcp_json) =
+            generate_mcp_json(&config.agents.claude_code, manifest.preset.as_deref())
+        {
+            files.push(GeneratedFile {
+                relative_path: ".mcp.json".to_string(),
+                content: mcp_json,
+            });
+        }
+
+        Ok(files)
     }
 }
 
@@ -144,6 +158,21 @@ fn generate_claude_md(manifest: &WorkspaceManifest, config: &Config) -> String {
              `feat`, `fix`, or `refactor`\n",
         );
         md.push_str("- PRDs and plans share the same numbering sequence within a folder\n");
+    }
+
+    // Sandbox guidance
+    if config.agents.claude_code.sandbox.enabled == Some(true) {
+        md.push_str("\n## Sandbox\n\n");
+        md.push_str(
+            "This workspace runs with sandbox enabled. Always try to work within the\n\
+             sandbox constraints first — use paths that are within the workspace, prefer\n\
+             tools and commands that don't require outside access, and structure your\n\
+             approach to stay within allowed boundaries.\n\n\
+             Only if a command genuinely cannot work within the sandbox (e.g., accessing\n\
+             system binaries, global config, or paths in other worktrees), use\n\
+             `dangerouslyDisableSandbox: true` on the Bash tool call. The user will\n\
+             still be prompted to approve each such command.\n",
+        );
     }
 
     md
@@ -284,7 +313,16 @@ fn build_sandbox_json(
         &sandbox.network.allow_unix_sockets,
         preset.map_or(&[], |p| &p.sandbox.network.allow_unix_sockets),
     );
-    if !allowed_domains.is_empty() || !allow_unix_sockets.is_empty() {
+    // Merge allow_local_binding: global wins if set, else preset
+    let allow_local_binding = sandbox
+        .network
+        .allow_local_binding
+        .or(preset.and_then(|p| p.sandbox.network.allow_local_binding));
+
+    if !allowed_domains.is_empty()
+        || !allow_unix_sockets.is_empty()
+        || allow_local_binding.is_some()
+    {
         let mut net_obj = serde_json::Map::new();
         if !allowed_domains.is_empty() {
             net_obj.insert(
@@ -298,10 +336,61 @@ fn build_sandbox_json(
                 serde_json::json!(allow_unix_sockets),
             );
         }
+        if let Some(allow_local_binding) = allow_local_binding {
+            net_obj.insert(
+                "allowLocalBinding".to_string(),
+                serde_json::Value::Bool(allow_local_binding),
+            );
+        }
         obj.insert("network".to_string(), serde_json::Value::Object(net_obj));
     }
 
     obj
+}
+
+/// Generate .mcp.json content from global + preset MCP server definitions.
+///
+/// Returns `None` if no servers are configured. Preset servers override global servers
+/// with the same name.
+fn generate_mcp_json(cc_config: &ClaudeCodeConfig, preset_name: Option<&str>) -> Option<String> {
+    let mut servers = BTreeMap::new();
+
+    // Global MCP servers
+    for (name, config) in &cc_config.mcp_servers {
+        servers.insert(name.clone(), config.clone());
+    }
+
+    // Preset MCP servers (override global by name)
+    if let Some(preset_name) = preset_name
+        && let Some(preset) = cc_config.presets.get(preset_name)
+    {
+        for (name, config) in &preset.mcp_servers {
+            servers.insert(name.clone(), config.clone());
+        }
+    }
+
+    if servers.is_empty() {
+        return None;
+    }
+
+    // Convert to JSON — inject "type" field based on transport variant.
+    // Claude Code requires "type": "sse" for SSE servers; stdio is the default.
+    let mcp_servers: serde_json::Map<String, serde_json::Value> = servers
+        .into_iter()
+        .map(|(name, config)| {
+            let mut val =
+                serde_json::to_value(&config).expect("McpServerConfig is always serializable");
+            if let Some(obj) = val.as_object_mut()
+                && config.url.is_some()
+            {
+                obj.insert("type".to_string(), serde_json::json!("sse"));
+            }
+            (name, val)
+        })
+        .collect();
+
+    let root = serde_json::json!({ "mcpServers": mcp_servers });
+    Some(serde_json::to_string_pretty(&root).expect("JSON serialization cannot fail"))
 }
 
 /// Generate .claude/settings.json content.
@@ -357,6 +446,10 @@ fn generate_settings(
 
     if !cc_config.enabled_mcp_servers.is_empty() {
         obj["enabledMcpjsonServers"] = serde_json::json!(cc_config.enabled_mcp_servers);
+    }
+
+    if !cc_config.env.is_empty() {
+        obj["env"] = serde_json::json!(cc_config.env);
     }
 
     // Resolve the preset (if any). Upstream callers (generate_agent_files,
@@ -633,6 +726,32 @@ mod tests {
     }
 
     #[test]
+    fn test_claude_md_with_sandbox_guidance_snapshot() {
+        let manifest = test_manifest();
+        let mut config = test_config();
+        config.agents.claude_code.sandbox.enabled = Some(true);
+        let content = generate_claude_md(&manifest, &config);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_claude_md_no_sandbox_guidance_when_disabled() {
+        let manifest = test_manifest();
+        let mut config = test_config();
+        config.agents.claude_code.sandbox.enabled = Some(false);
+        let content = generate_claude_md(&manifest, &config);
+        assert!(!content.contains("## Sandbox"));
+    }
+
+    #[test]
+    fn test_claude_md_no_sandbox_guidance_when_absent() {
+        let manifest = test_manifest();
+        let config = test_config();
+        let content = generate_claude_md(&manifest, &config);
+        assert!(!content.contains("## Sandbox"));
+    }
+
+    #[test]
     fn test_claude_md_custom_default_branch() {
         let mut manifest = test_manifest();
         manifest.base_branch = Some("develop".to_string());
@@ -708,6 +827,20 @@ mod tests {
     }
 
     #[test]
+    fn test_settings_with_bare_mcp_tool_snapshot() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            allowed_tools: vec![
+                "Bash(gh issue *)".to_string(),
+                "mcp__sentry__find_organizations".to_string(),
+            ],
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
     fn test_settings_with_sandbox_snapshot() {
         let manifest = test_manifest();
         let cc_config = ClaudeCodeConfig {
@@ -723,7 +856,7 @@ mod tests {
                 },
                 network: SandboxNetworkConfig {
                     allowed_domains: vec!["github.com".to_string()],
-                    allow_unix_sockets: vec![],
+                    ..Default::default()
                 },
             },
             ..Default::default()
@@ -752,9 +885,10 @@ mod tests {
                     },
                     network: SandboxNetworkConfig {
                         allowed_domains: vec!["crates.io".to_string(), "docs.rs".to_string()],
-                        allow_unix_sockets: vec![],
+                        ..Default::default()
                     },
                 },
+                ..Default::default()
             },
         );
 
@@ -776,7 +910,7 @@ mod tests {
                 },
                 network: SandboxNetworkConfig {
                     allowed_domains: vec!["github.com".to_string()],
-                    allow_unix_sockets: vec![],
+                    ..Default::default()
                 },
             },
             presets,
@@ -804,8 +938,10 @@ mod tests {
                     network: SandboxNetworkConfig {
                         allowed_domains: vec!["docs.rs".to_string()],
                         allow_unix_sockets: vec!["/tmp/preset.sock".to_string()],
+                        ..Default::default()
                     },
                 },
+                ..Default::default()
             },
         );
 
@@ -834,9 +970,11 @@ mod tests {
                 network: SandboxNetworkConfig {
                     allowed_domains: vec!["github.com".to_string()],
                     allow_unix_sockets: vec!["/tmp/global.sock".to_string()],
+                    ..Default::default()
                 },
             },
             presets,
+            ..Default::default()
         };
 
         let content = generate_settings(&manifest, &cc_config, Some("rust"));
@@ -854,6 +992,7 @@ mod tests {
                     allow_unix_sockets: vec![
                         "/Users/me/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh".to_string(),
                     ],
+                    ..Default::default()
                 },
                 ..Default::default()
             },
@@ -885,6 +1024,41 @@ mod tests {
     }
 
     #[test]
+    fn test_settings_allow_local_binding_preset_fallback() {
+        let manifest = test_manifest();
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "test".to_string(),
+            PermissionPreset {
+                sandbox: PresetSandboxConfig {
+                    network: SandboxNetworkConfig {
+                        allow_local_binding: Some(true),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        let cc_config = ClaudeCodeConfig {
+            sandbox: SandboxConfig {
+                enabled: Some(true),
+                // global does NOT set allow_local_binding
+                ..Default::default()
+            },
+            presets,
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, Some("test"));
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        // Preset value should be used as fallback
+        assert_eq!(
+            parsed["sandbox"]["network"]["allowLocalBinding"],
+            serde_json::json!(true)
+        );
+    }
+
+    #[test]
     fn test_settings_enable_weaker_network_isolation() {
         let manifest = test_manifest();
         let cc_config = ClaudeCodeConfig {
@@ -901,6 +1075,62 @@ mod tests {
             parsed["sandbox"]["enableWeakerNetworkIsolation"],
             serde_json::json!(true)
         );
+    }
+
+    #[test]
+    fn test_settings_with_allow_local_binding_snapshot() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            sandbox: SandboxConfig {
+                enabled: Some(true),
+                network: SandboxNetworkConfig {
+                    allow_local_binding: Some(true),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_allow_local_binding_absent_when_none() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig {
+            sandbox: SandboxConfig {
+                enabled: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        // No network key at all when no network fields are set
+        assert!(parsed["sandbox"].get("network").is_none());
+    }
+
+    #[test]
+    fn test_settings_with_env_snapshot() {
+        let manifest = test_manifest();
+        let mut env = BTreeMap::new();
+        env.insert("GIT_SSH_COMMAND".to_string(), "ssh".to_string());
+        let cc_config = ClaudeCodeConfig {
+            env,
+            ..Default::default()
+        };
+        let content = generate_settings(&manifest, &cc_config, None);
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_settings_env_absent_when_empty() {
+        let manifest = test_manifest();
+        let cc_config = ClaudeCodeConfig::default();
+        let content = generate_settings(&manifest, &cc_config, None);
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(parsed.get("env").is_none());
     }
 
     #[test]
@@ -1003,5 +1233,105 @@ mod tests {
         // enabled = false — .git paths should NOT be injected
         assert_eq!(allow.len(), 1);
         assert_eq!(allow[0], "~/.config/loom");
+    }
+
+    #[test]
+    fn test_mcp_json_global_servers_snapshot() {
+        use crate::config::McpServerConfig;
+        let mut mcp_servers = BTreeMap::new();
+        mcp_servers.insert(
+            "linear".to_string(),
+            McpServerConfig {
+                command: Some("npx".to_string()),
+                args: Some(vec!["@anthropic/linear-mcp".to_string()]),
+                ..Default::default()
+            },
+        );
+        let cc_config = ClaudeCodeConfig {
+            mcp_servers,
+            ..Default::default()
+        };
+        let content = generate_mcp_json(&cc_config, None).unwrap();
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_mcp_json_sse_server_snapshot() {
+        use crate::config::McpServerConfig;
+        let mut mcp_servers = BTreeMap::new();
+        mcp_servers.insert(
+            "grafana".to_string(),
+            McpServerConfig {
+                url: Some("https://grafana.example.com/mcp".to_string()),
+                ..Default::default()
+            },
+        );
+        let cc_config = ClaudeCodeConfig {
+            mcp_servers,
+            ..Default::default()
+        };
+        let content = generate_mcp_json(&cc_config, None).unwrap();
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_mcp_json_preset_overrides_global() {
+        use crate::config::McpServerConfig;
+        let mut global_servers = BTreeMap::new();
+        global_servers.insert(
+            "shared".to_string(),
+            McpServerConfig {
+                command: Some("global-cmd".to_string()),
+                ..Default::default()
+            },
+        );
+        let mut preset_servers = BTreeMap::new();
+        preset_servers.insert(
+            "shared".to_string(),
+            McpServerConfig {
+                command: Some("preset-cmd".to_string()),
+                ..Default::default()
+            },
+        );
+        let mut presets = BTreeMap::new();
+        presets.insert(
+            "rust".to_string(),
+            PermissionPreset {
+                mcp_servers: preset_servers,
+                ..Default::default()
+            },
+        );
+        let cc_config = ClaudeCodeConfig {
+            mcp_servers: global_servers,
+            presets,
+            ..Default::default()
+        };
+        let content = generate_mcp_json(&cc_config, Some("rust")).unwrap();
+        insta::assert_snapshot!(content);
+    }
+
+    #[test]
+    fn test_mcp_json_none_when_empty() {
+        let cc_config = ClaudeCodeConfig::default();
+        assert!(generate_mcp_json(&cc_config, None).is_none());
+    }
+
+    #[test]
+    fn test_generator_includes_mcp_json() {
+        use crate::config::McpServerConfig;
+        let generator = ClaudeCodeGenerator;
+        let manifest = test_manifest();
+        let mut config = test_config();
+        config.agents.claude_code.mcp_servers.insert(
+            "test".to_string(),
+            McpServerConfig {
+                command: Some("test-cmd".to_string()),
+                ..Default::default()
+            },
+        );
+        let files = generator.generate(&manifest, &config).unwrap();
+        assert_eq!(files.len(), 3);
+        let mcp_file = files.iter().find(|f| f.relative_path == ".mcp.json");
+        assert!(mcp_file.is_some());
     }
 }

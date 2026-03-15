@@ -1,0 +1,12 @@
+---
+source: crates/loom-core/src/agent/claude_code.rs
+expression: content
+---
+{
+  "mcpServers": {
+    "grafana": {
+      "type": "sse",
+      "url": "https://grafana.example.com/mcp"
+    }
+  }
+}

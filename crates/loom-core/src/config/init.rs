@@ -72,7 +72,7 @@ pub fn build_claude_code_config(flavor: SecurityFlavor) -> ClaudeCodeConfig {
                 filesystem: SandboxFilesystemConfig::default(),
                 network: SandboxNetworkConfig {
                     allowed_domains: vec!["github.com".to_string()],
-                    allow_unix_sockets: vec![],
+                    ..Default::default()
                 },
                 ..Default::default()
             },
@@ -93,7 +93,7 @@ pub fn build_claude_code_config(flavor: SecurityFlavor) -> ClaudeCodeConfig {
                 filesystem: SandboxFilesystemConfig::default(),
                 network: SandboxNetworkConfig {
                     allowed_domains: vec!["github.com".to_string()],
-                    allow_unix_sockets: vec![],
+                    ..Default::default()
                 },
                 ..Default::default()
             },
@@ -110,6 +110,13 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
             "\
 \n# enabled_mcp_servers = [\"linear\", \"notion\"]
 #
+# [agents.claude-code.env]
+# GIT_SSH_COMMAND = \"ssh\"  # Fix SSH push on macOS with sandbox proxy
+#
+# [agents.claude-code.mcp_servers.linear]
+# command = \"npx\"
+# args = [\"@anthropic/linear-mcp\"]
+#
 # Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust.sandbox.filesystem]
 # allow_write = [\"~/.cargo\"]
@@ -117,11 +124,19 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 # [agents.claude-code.presets.rust.sandbox.network]
 # allowed_domains = [\"docs.rs\", \"crates.io\"]
 # allow_unix_sockets = [\"/path/to/ssh-agent.sock\"]
+# allow_local_binding = true  # Allow binding localhost ports (e.g., for e2e tests)
 "
         }
         SecurityFlavor::Permissions => {
             "\
 \n# enabled_mcp_servers = [\"linear\", \"notion\"]
+#
+# [agents.claude-code.env]
+# GIT_SSH_COMMAND = \"ssh\"  # Fix SSH push on macOS with sandbox proxy
+#
+# [agents.claude-code.mcp_servers.linear]
+# command = \"npx\"
+# args = [\"@anthropic/linear-mcp\"]
 #
 # Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust]
@@ -136,6 +151,13 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
             "\
 \n# enabled_mcp_servers = [\"linear\", \"notion\"]
 #
+# [agents.claude-code.env]
+# GIT_SSH_COMMAND = \"ssh\"  # Fix SSH push on macOS with sandbox proxy
+#
+# [agents.claude-code.mcp_servers.linear]
+# command = \"npx\"
+# args = [\"@anthropic/linear-mcp\"]
+#
 # Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust]
 # allowed_tools = [
@@ -149,6 +171,7 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 # [agents.claude-code.presets.rust.sandbox.network]
 # allowed_domains = [\"docs.rs\", \"crates.io\"]
 # allow_unix_sockets = [\"/path/to/ssh-agent.sock\"]
+# allow_local_binding = true  # Allow binding localhost ports (e.g., for e2e tests)
 "
         }
         SecurityFlavor::Skip => {
@@ -168,6 +191,7 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 # [agents.claude-code.sandbox.network]
 # allowed_domains = [\"github.com\"]
 # allow_unix_sockets = [\"/path/to/ssh-agent.sock\"]
+# allow_local_binding = true  # Allow binding localhost ports (e.g., for e2e tests)
 #
 # Permissions — explicit tool allowlists:
 # [agents.claude-code]
@@ -178,6 +202,15 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 #     \"Bash(gh run *)\",
 # ]
 # enabled_mcp_servers = [\"linear\", \"notion\"]
+#
+# Environment variables for Claude Code sessions:
+# [agents.claude-code.env]
+# GIT_SSH_COMMAND = \"ssh\"  # Fix SSH push on macOS with sandbox proxy
+#
+# MCP server definitions (generates .mcp.json in workspace root):
+# [agents.claude-code.mcp_servers.linear]
+# command = \"npx\"
+# args = [\"@anthropic/linear-mcp\"]
 #
 # Named presets — select per workspace with: loom new my-ws --preset rust
 # [agents.claude-code.presets.rust]
@@ -193,6 +226,7 @@ pub fn preset_comment_block(flavor: SecurityFlavor) -> &'static str {
 # [agents.claude-code.presets.rust.sandbox.network]
 # allowed_domains = [\"docs.rs\", \"crates.io\"]
 # allow_unix_sockets = [\"/path/to/ssh-agent.sock\"]
+# allow_local_binding = true  # Allow binding localhost ports (e.g., for e2e tests)
 "
         }
     }

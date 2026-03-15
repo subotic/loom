@@ -497,7 +497,7 @@ Uses the `[terminal]` config command, falling back to `TERM_PROGRAM` env var det
 
 ### `loom refresh`
 
-Regenerate agent files (CLAUDE.md and `.claude/settings.json`) from current config.
+Regenerate agent files (CLAUDE.md, `.claude/settings.json`, and `.mcp.json` if configured) from current config.
 
 ```
 loom refresh [NAME] [--preset NAME]
@@ -563,6 +563,8 @@ Configuration lives at `~/.config/loom/config.toml`. Created by `loom init`, edi
 | `[specs]` | No | No specs section in generated CLAUDE.md |
 | `[agents]` | No | No agent files generated |
 | `[agents.claude-code]` | No | Minimal settings.json (directories only) |
+| `[agents.claude-code.env]` | No | No environment variables set |
+| `[agents.claude-code.mcp_servers.<name>]` | No | No `.mcp.json` generated |
 | `[agents.claude-code.sandbox]` | No | No sandbox isolation |
 | `[agents.claude-code.presets.<name>]` | No | No presets available |
 
@@ -623,12 +625,25 @@ allowed_tools = [                          # Global tool allowlist
     "Bash(gh issue *)",
     "Bash(gh run *)",
     "WebFetch(domain:docs.rs)",
+    "mcp__sentry__find_organizations",         # Bare MCP tool names are also valid
 ]
 enabled_plugins = ["my-plugin@my-marketplace"]
 enabled_mcp_servers = ["linear", "notion"]
 extra_known_marketplaces = [
     { name = "my-marketplace", repo = "owner/plugins-repo" },
 ]
+
+# Environment variables for Claude Code sessions
+[agents.claude-code.env]
+GIT_SSH_COMMAND = "ssh"                    # Fix SSH push on macOS with sandbox proxy
+
+# MCP server definitions (generates .mcp.json in workspace root)
+[agents.claude-code.mcp_servers.linear]
+command = "npx"
+args = ["@anthropic/linear-mcp"]
+
+[agents.claude-code.mcp_servers.grafana]
+url = "https://grafana.example.com/mcp"
 
 # OS-level sandbox isolation
 [agents.claude-code.sandbox]
@@ -646,6 +661,7 @@ deny_read = []
 [agents.claude-code.sandbox.network]
 allowed_domains = ["github.com", "docs.rs", "crates.io"]
 allow_unix_sockets = ["/path/to/ssh-agent.sock"]
+allow_local_binding = true                 # Allow binding localhost ports (e.g., for e2e tests)
 
 # Named presets — selected per workspace with --preset
 [agents.claude-code.presets.rust]
@@ -660,6 +676,10 @@ allow_write = ["~/.cargo"]
 
 [agents.claude-code.presets.rust.sandbox.network]
 allowed_domains = ["docs.rs", "crates.io"]
+
+# Presets can also define MCP servers (override global servers with the same name)
+[agents.claude-code.presets.rust.mcp_servers.rust-analyzer]
+command = "rust-analyzer-mcp"
 ```
 
 ### Per-Section Reference
@@ -735,10 +755,12 @@ frontend = ["dsp-app", "dsp-dashboard"]
 |--------|------|---------|-------------|
 | `model` | `string` | — | Pin a Claude model (e.g., `"opus"`, `"sonnet"`). |
 | `effort_level` | `string` | — | Adaptive reasoning effort level. Valid: `"low"`, `"medium"`, `"high"`. Only affects Opus 4.6 / Sonnet 4.6. |
-| `allowed_tools` | `string[]` | `[]` | Global tool allowlist. Format: `ToolName(specifier)`. See [Permission Pattern Syntax](#permission-pattern-syntax). |
+| `allowed_tools` | `string[]` | `[]` | Global tool allowlist. Format: `ToolName(specifier)` or bare MCP tool names like `mcp__sentry__find_organizations`. See [Permission Pattern Syntax](#permission-pattern-syntax). |
 | `enabled_plugins` | `string[]` | `[]` | Plugins to enable. Format: `"pluginName@marketplaceName"`. |
 | `enabled_mcp_servers` | `string[]` | `[]` | MCP JSON servers to enable in the workspace. Maps to `enabledMcpjsonServers` in settings.json. |
 | `extra_known_marketplaces` | `table[]` | `[]` | Additional plugin marketplace sources. Each entry: `{ name = "...", repo = "owner/repo" }`. |
+| `env` | `table` | `{}` | Environment variables for Claude Code sessions. Maps to `env` in settings.json. Example: `GIT_SSH_COMMAND = "ssh"`. |
+| `mcp_servers` | `table` | `{}` | MCP server definitions (stdio or SSE). Generates `.mcp.json` in workspace root. See below. |
 
 > **Warning:** If any `enabled_plugins` key is wrong or the marketplace isn't registered, the plugin silently won't load. Verify plugin activation after config changes.
 
@@ -766,6 +788,18 @@ frontend = ["dsp-app", "dsp-dashboard"]
 |--------|------|---------|-------------|
 | `allowed_domains` | `string[]` | `[]` | Network domains the sandbox allows access to. |
 | `allow_unix_sockets` | `string[]` | `[]` | Unix socket paths that sandboxed commands can connect to (e.g., SSH agent sockets). Maps to `allowUnixSockets` in settings.json. |
+| `allow_local_binding` | `bool` | — | Allow binding localhost ports (e.g., for e2e tests). Maps to `allowLocalBinding` in settings.json. |
+
+#### `[agents.claude-code.mcp_servers.<name>]` (Optional)
+
+MCP server definitions. Each server must have either `command` (stdio) or `url` (SSE), not both. Generates a `.mcp.json` file in the workspace root.
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `command` | `string` | Command to launch the MCP server (stdio transport). |
+| `args` | `string[]` | Arguments for the command. |
+| `url` | `string` | URL for SSE transport. Mutually exclusive with `command`. |
+| `env` | `table` | Environment variables passed to the server process. |
 
 #### `[agents.claude-code.presets.<name>]` (Optional)
 
@@ -779,6 +813,9 @@ Named permission presets. See [Permission Presets](#permission-presets) for deta
 | `sandbox.filesystem.deny_read` | `string[]` | Additional read-denied paths (merged with global). |
 | `sandbox.network.allowed_domains` | `string[]` | Additional allowed domains (merged with global). |
 | `sandbox.network.allow_unix_sockets` | `string[]` | Additional Unix socket paths (merged with global). |
+| `mcp_servers.<name>` | `table` | Preset-level MCP server definitions. Override global servers with the same name. |
+
+> **Note:** When sandbox is enabled, the generated CLAUDE.md includes guidance instructing the agent to work within sandbox constraints before resorting to `dangerouslyDisableSandbox`.
 
 ### Example Configurations
 
@@ -1045,9 +1082,11 @@ When a preset is applied, its settings are **merged** with the global config:
 | Field Type | Merge Behavior | Example Fields |
 |------------|---------------|----------------|
 | Arrays | Global **∪** Preset (union, sorted, deduplicated) | `allowed_tools`, `filesystem.allow_write`, `network.allowed_domains` |
-| Booleans | Global only (presets cannot override) | `sandbox.enabled`, `sandbox.auto_allow`, `sandbox.excluded_commands` |
+| Booleans (top-level) | Global only (presets cannot override) | `sandbox.enabled`, `sandbox.auto_allow` |
+| `allow_local_binding` | Global wins if set, else preset fallback | `sandbox.network.allow_local_binding` |
+| MCP servers | Preset overrides global by name | `mcp_servers.<name>` |
 
-**Why:** Presets can only **add** permissions, never remove global restrictions. Boolean flags (enabled, auto_allow) are enforced by the global config only — the preset schema excludes them.
+**Why:** Presets can only **add** permissions, never remove global restrictions. Top-level boolean flags (enabled, auto_allow) and `excluded_commands` are enforced by the global config only — the preset schema excludes them. `allow_local_binding` is an exception: it follows "global wins, preset fallback" semantics because it lives in the shared `SandboxNetworkConfig` type.
 
 ### Worked Example
 
@@ -1107,13 +1146,13 @@ allowed_domains = ["docs.rs", "crates.io"]
 }
 ```
 
-All arrays are merged, sorted, and deduplicated. Booleans come from global config only.
+All arrays are merged, sorted, and deduplicated. Top-level booleans come from global config only. `allow_local_binding` uses global-wins-else-preset-fallback. MCP servers are overridden by name.
 
 ---
 
 ## Agent Integration
 
-When `[agents]` is configured, LOOM generates two files per workspace:
+When `[agents]` is configured, LOOM generates up to three files per workspace:
 
 ### Generated `CLAUDE.md`
 
@@ -1124,6 +1163,7 @@ The workspace root gets a `CLAUDE.md` containing:
 - **Working instructions** — how to use `loom exec`, `loom save`, `loom status`
 - **Workflows section** — PR vs push instructions per repo (only if `[repos]` entries exist)
 - **Specs section** — PRD/plan path conventions (only if `[specs]` configured)
+- **Sandbox section** — guidance for working within sandbox constraints (only if `sandbox.enabled = true`)
 
 ### Generated `.claude/settings.json`
 
@@ -1137,7 +1177,14 @@ The workspace root gets a `CLAUDE.md` containing:
 | `enabled_plugins` | `enabledPlugins` (map of name → `true`) |
 | `enabled_mcp_servers` | `enabledMcpjsonServers` |
 | `extra_known_marketplaces` | `extraKnownMarketplaces` |
+| `env` | `env` |
 | `sandbox.network.allow_unix_sockets` | `sandbox.network.allowUnixSockets` |
+| `sandbox.network.allow_local_binding` | `sandbox.network.allowLocalBinding` |
+| `mcp_servers.*` | `.mcp.json` (separate file in workspace root) |
+
+### Generated `.mcp.json`
+
+When `[agents.claude-code.mcp_servers]` is configured, LOOM generates a `.mcp.json` file in the workspace root. Global and preset MCP servers are merged (preset overrides global by name).
 
 > **Path convention:** Claude Code's sandbox interprets `/path` as relative to the settings file directory, not as an absolute path. LOOM automatically converts absolute paths to `//path` (filesystem-root-absolute) and `~/path` (home-relative) paths pass through unchanged. Additionally, when `sandbox.enabled = true`, LOOM auto-injects each original repo's `.git` directory into `allowWrite` so git worktree operations can access shared state. Note: `allowUnixSockets` paths are **not** subject to the `//` prefix conversion — they are passed to the network proxy, not the filesystem sandbox.
 

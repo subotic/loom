@@ -1,0 +1,22 @@
+---
+source: crates/loom-core/src/agent/claude_code.rs
+expression: content
+---
+{
+  "additionalDirectories": [
+    "/loom/my-feature/dsp-api",
+    "/loom/my-feature/dsp-das"
+  ],
+  "sandbox": {
+    "enabled": true,
+    "filesystem": {
+      "allowWrite": [
+        "//code/dasch-swiss/dsp-api/.git",
+        "//code/dasch-swiss/dsp-das/.git"
+      ]
+    },
+    "network": {
+      "allowLocalBinding": true
+    }
+  }
+}
