@@ -573,7 +573,7 @@ mod tests {
                 enabled: vec!["claude-code".to_string()],
                 claude_code: build_claude_code_config(SecurityFlavor::Sandbox),
             },
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         save_init_config_to(&config, SecurityFlavor::Sandbox, &config_path).unwrap();
@@ -604,7 +604,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         save_init_config_to(&config, SecurityFlavor::Skip, &config_path).unwrap();
@@ -703,7 +703,7 @@ auto_allow = true
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         // Test directory creation
@@ -784,7 +784,7 @@ auto_allow = true
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         save_init_config_to(&config, SecurityFlavor::Sandbox, &config_path).unwrap();
@@ -835,7 +835,7 @@ enabled = ["claude-code"]
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         update_non_agent_config_at(&config, &config_path, None).unwrap();

@@ -119,7 +119,8 @@ pub fn generate_agent_files(
 mod tests {
     use super::*;
     use crate::config::{
-        AgentsConfig, UpdateConfig, DefaultsConfig, RegistryConfig, RepoConfig, Workflow, WorkspaceConfig,
+        AgentsConfig, DefaultsConfig, RegistryConfig, RepoConfig, UpdateConfig, Workflow,
+        WorkspaceConfig,
     };
     use crate::manifest::RepoManifestEntry;
     use std::collections::BTreeMap;
@@ -146,7 +147,7 @@ mod tests {
                 enabled: vec!["claude-code".to_string()],
                 ..Default::default()
             },
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let manifest = WorkspaceManifest {
@@ -194,7 +195,7 @@ mod tests {
                 enabled: vec!["claude-code".to_string()],
                 ..Default::default()
             },
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let manifest = WorkspaceManifest {
@@ -235,7 +236,7 @@ mod tests {
                 enabled: vec!["unknown-agent".to_string()],
                 ..Default::default()
             },
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let manifest = WorkspaceManifest {
@@ -297,7 +298,7 @@ mod tests {
                 enabled: vec![],
                 ..Default::default()
             },
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let manifest = WorkspaceManifest {
@@ -347,7 +348,7 @@ mod tests {
                 enabled: vec!["claude-code".to_string()],
                 ..Default::default()
             },
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let manifest = WorkspaceManifest {
@@ -411,7 +412,7 @@ mod tests {
                 enabled: vec!["claude-code".to_string()],
                 ..Default::default()
             },
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let manifest = WorkspaceManifest {
@@ -468,7 +469,7 @@ mod tests {
                 enabled: vec!["claude-code".to_string()],
                 ..Default::default()
             },
-        update: UpdateConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let manifest = WorkspaceManifest {

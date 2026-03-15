@@ -87,7 +87,9 @@ pub fn remove_repo(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AgentsConfig, UpdateConfig, DefaultsConfig, RegistryConfig, WorkspaceConfig};
+    use crate::config::{
+        AgentsConfig, DefaultsConfig, RegistryConfig, UpdateConfig, WorkspaceConfig,
+    };
     use crate::manifest::RepoManifestEntry;
     use std::collections::BTreeMap;
 

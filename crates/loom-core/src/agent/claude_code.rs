@@ -482,9 +482,10 @@ fn generate_settings(
 mod tests {
     use super::*;
     use crate::config::{
-        AgentsConfig, UpdateConfig, ClaudeCodeConfig, DefaultsConfig, EffortLevel, MarketplaceEntry,
+        AgentsConfig, ClaudeCodeConfig, DefaultsConfig, EffortLevel, MarketplaceEntry,
         PermissionPreset, PresetSandboxConfig, RegistryConfig, RepoConfig, SandboxConfig,
-        SandboxFilesystemConfig, SandboxNetworkConfig, SpecsConfig, Workflow, WorkspaceConfig,
+        SandboxFilesystemConfig, SandboxNetworkConfig, SpecsConfig, UpdateConfig, Workflow,
+        WorkspaceConfig,
     };
     use crate::manifest::RepoManifestEntry;
     use std::collections::BTreeMap;
