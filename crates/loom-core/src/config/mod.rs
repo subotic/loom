@@ -31,7 +31,7 @@ pub struct Config {
     #[serde(default)]
     pub agents: AgentsConfig,
     /// Auto-update settings.
-    #[serde(default, skip_serializing_if = "UpdateConfig::is_default")]
+    #[serde(default, skip_serializing_if = "UpdateConfig::is_empty")]
     pub update: UpdateConfig,
 }
 
@@ -353,8 +353,9 @@ impl Default for UpdateConfig {
 impl UpdateConfig {
     /// Returns true when the config is at its default value (enabled = true).
     /// Used by `skip_serializing_if` to omit the `[update]` section when unnecessary.
-    pub fn is_default(&self) -> bool {
-        self.enabled
+    /// Named `is_empty` to match the project's serde convention.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
     }
 }
 

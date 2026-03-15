@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use self_update::backends::github::UpdateBuilder;
 use self_update::cargo_crate_version;
 
 const REPO_OWNER: &str = "subotic";
@@ -12,24 +13,37 @@ const BIN_NAME: &str = "loom";
 /// How often to check for updates (in seconds).
 const CHECK_INTERVAL_SECS: u64 = 3600; // 1 hour
 
+/// Return a pre-configured update builder for GitHub Releases.
+///
+/// Callers can add options (e.g., `.show_download_progress()`) before `.build()`.
+fn updater() -> UpdateBuilder {
+    let mut builder = self_update::backends::github::Update::configure();
+    builder
+        .repo_owner(REPO_OWNER)
+        .repo_name(REPO_NAME)
+        .bin_name(BIN_NAME)
+        .current_version(cargo_crate_version!());
+    builder
+}
+
 /// Check for updates and apply immediately if found.
 ///
 /// - `force`: bypass the hourly rate limit
 /// - `show_progress`: show download progress bar (true for `loom update`, false for auto-update)
 ///
 /// Returns the new version string if updated, `None` if already up-to-date or throttled.
+///
+/// Note: this is a synchronous network call. On startup auto-update, the hourly
+/// throttle ensures this only fires once per hour. If the network is slow,
+/// the CLI will block until the request completes or times out.
 pub fn check_and_update(force: bool, show_progress: bool) -> Result<Option<String>> {
     if !force && !should_check()? {
         return Ok(None);
     }
 
-    let status = self_update::backends::github::Update::configure()
-        .repo_owner(REPO_OWNER)
-        .repo_name(REPO_NAME)
-        .bin_name(BIN_NAME)
+    let status = updater()
         .show_download_progress(show_progress)
         .no_confirm(true)
-        .current_version(cargo_crate_version!())
         .build()?
         .update()?;
 
@@ -49,15 +63,7 @@ pub fn check_and_update(force: bool, show_progress: bool) -> Result<Option<Strin
 /// Returns `(current_version, latest_version)`.
 pub fn check_version() -> Result<(String, String)> {
     let current = cargo_crate_version!().to_string();
-
-    let latest = self_update::backends::github::Update::configure()
-        .repo_owner(REPO_OWNER)
-        .repo_name(REPO_NAME)
-        .bin_name(BIN_NAME)
-        .current_version(cargo_crate_version!())
-        .build()?
-        .get_latest_release()?;
-
+    let latest = updater().build()?.get_latest_release()?;
     Ok((current, latest.version))
 }
 
@@ -105,8 +111,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_is_disabled_by_env_default() {
-        let _ = is_disabled_by_env();
+    fn test_is_disabled_by_env_respects_value() {
+        // SAFETY: test runs single-threaded; no concurrent env var access.
+        unsafe {
+            std::env::remove_var("LOOM_DISABLE_UPDATE");
+        }
+        assert!(!is_disabled_by_env());
+
+        // SAFETY: test runs single-threaded; no concurrent env var access.
+        unsafe {
+            std::env::set_var("LOOM_DISABLE_UPDATE", "1");
+        }
+        assert!(is_disabled_by_env());
+
+        // Clean up
+        // SAFETY: test runs single-threaded; no concurrent env var access.
+        unsafe {
+            std::env::remove_var("LOOM_DISABLE_UPDATE");
+        }
     }
 
     #[test]
