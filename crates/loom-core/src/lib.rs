@@ -7,4 +7,5 @@ pub mod names;
 pub mod registry;
 pub mod sync;
 pub mod tui;
+pub mod update;
 pub mod workspace;
