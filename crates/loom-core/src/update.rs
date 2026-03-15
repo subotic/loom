@@ -56,7 +56,7 @@ pub fn check_version() -> Result<(String, String)> {
 
 /// Whether updates are disabled via env var or config.
 pub fn is_disabled() -> bool {
-    std::env::var("LOOM_DISABLE_UPDATE").map_or(false, |v| v == "1")
+    std::env::var("LOOM_DISABLE_UPDATE").is_ok_and(|v| v == "1")
 }
 
 // --- Rate limiting ---

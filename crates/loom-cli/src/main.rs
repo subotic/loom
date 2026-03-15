@@ -24,5 +24,18 @@ fn main() -> anyhow::Result<()> {
         .without_time()
         .init();
 
+    // Auto-update check: silent, respects hourly throttle.
+    // Runs after logging init so tracing works, but before cli.run().
+    if !loom_core::update::is_disabled() {
+        match loom_core::update::check_and_update(false, false) {
+            Ok(Some(v)) => {
+                eprintln!("Updated to v{v}. Please restart.");
+                std::process::exit(0);
+            }
+            Ok(None) => {} // up-to-date or throttled
+            Err(_) => {}   // silent failure
+        }
+    }
+
     cli.run()
 }
