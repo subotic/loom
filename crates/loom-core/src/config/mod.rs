@@ -30,6 +30,9 @@ pub struct Config {
     pub specs: Option<SpecsConfig>,
     #[serde(default)]
     pub agents: AgentsConfig,
+    /// Auto-update settings.
+    #[serde(default, skip_serializing_if = "UpdateConfig::is_empty")]
+    pub update: UpdateConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,6 +336,33 @@ pub struct SpecsConfig {
     pub path: String,
 }
 
+/// Auto-update settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateConfig {
+    /// Whether auto-update is enabled (default: true).
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for UpdateConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+impl UpdateConfig {
+    /// Returns true when the config is at its default value (enabled = true).
+    /// Used by `skip_serializing_if` to omit the `[update]` section when unnecessary.
+    /// Named `is_empty` to match the project's serde convention.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
 fn default_branch_prefix() -> String {
     "loom".to_string()
 }
@@ -593,6 +623,7 @@ impl Config {
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         }
     }
 
@@ -827,6 +858,7 @@ mod tests {
                 enabled: vec!["claude-code".to_string()],
                 ..Default::default()
             },
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -837,6 +869,36 @@ mod tests {
         assert_eq!(parsed.defaults.branch_prefix, "loom");
         assert!(parsed.sync.is_some());
         assert!(parsed.terminal.is_some());
+        assert!(parsed.update.enabled);
+    }
+
+    #[test]
+    fn test_update_config_disabled() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+
+[update]
+enabled = false
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(!config.update.enabled);
+    }
+
+    #[test]
+    fn test_update_config_defaults_to_enabled() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert!(config.update.enabled);
     }
 
     #[test]
@@ -890,6 +952,7 @@ root = "/loom"
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         config.save_to(&config_path).unwrap();
@@ -918,6 +981,7 @@ root = "/loom"
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         assert!(config.validate().is_err());
@@ -939,6 +1003,7 @@ root = "/loom"
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -998,6 +1063,7 @@ root = "/loom"
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -1033,6 +1099,7 @@ root = "/loom"
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -1098,6 +1165,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -1130,6 +1198,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -1162,6 +1231,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -1194,6 +1264,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -1224,6 +1295,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
         assert!(config.validate().is_err());
 
@@ -1283,6 +1355,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -1314,6 +1387,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -1362,6 +1436,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -1416,6 +1491,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -1442,6 +1518,7 @@ enabled = ["claude-code"]
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -1520,6 +1597,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -1549,6 +1627,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate_agent_config().unwrap_err();
@@ -1587,6 +1666,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -1619,6 +1699,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate_agent_config().unwrap_err();
@@ -1655,6 +1736,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate_agent_config().unwrap_err();
@@ -1688,6 +1770,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate_agent_config().unwrap_err();
@@ -1720,6 +1803,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate_agent_config().unwrap_err();
@@ -1746,6 +1830,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate_agent_config().unwrap_err();
@@ -1773,6 +1858,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate_agent_config().unwrap_err();
@@ -1812,6 +1898,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -1883,6 +1970,7 @@ enabled = ["claude-code"]
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -1966,6 +2054,7 @@ enabled = ["claude-code"]
                 path: "  ".to_string(),
             }),
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
         let err = config.validate().unwrap_err();
         assert!(err.to_string().contains("must not be empty"));
@@ -1990,6 +2079,7 @@ enabled = ["claude-code"]
                 path: "../etc/passwd".to_string(),
             }),
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
         let err = config.validate().unwrap_err();
         assert!(err.to_string().contains(".."));
@@ -2014,6 +2104,7 @@ enabled = ["claude-code"]
                 path: "/etc/passwd".to_string(),
             }),
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
         let err = config.validate().unwrap_err();
         assert!(err.to_string().contains("absolute"));
@@ -2066,6 +2157,7 @@ enabled = ["claude-code"]
                 path: "pkm/01 - PROJECTS/Personal/LOOM/specs".to_string(),
             }),
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -2104,6 +2196,7 @@ enabled = ["claude-code"]
             repos,
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -2129,6 +2222,7 @@ enabled = ["claude-code"]
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -2172,6 +2266,7 @@ enabled = ["claude-code"]
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -2199,6 +2294,7 @@ enabled = ["claude-code"]
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -2241,6 +2337,7 @@ root = "/loom"
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -2267,6 +2364,7 @@ root = "/loom"
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -2296,6 +2394,7 @@ root = "/loom"
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -2325,6 +2424,7 @@ root = "/loom"
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         let err = config.validate().unwrap_err();
@@ -2354,6 +2454,7 @@ root = "/loom"
             repos: BTreeMap::new(),
             specs: None,
             agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
         };
 
         assert!(config.validate().is_ok());
@@ -2448,6 +2549,7 @@ effort_level = "max"
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
         assert!(config.validate_agent_config().is_ok());
     }
@@ -2483,6 +2585,7 @@ effort_level = "max"
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
         assert!(config.validate_agent_config().is_ok());
     }
@@ -2519,6 +2622,7 @@ effort_level = "max"
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
         let err = config.validate_agent_config().unwrap_err();
         assert!(err.to_string().contains("cannot have both"));
@@ -2549,6 +2653,7 @@ effort_level = "max"
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
         let err = config.validate_agent_config().unwrap_err();
         assert!(err.to_string().contains("must have either"));
@@ -2606,6 +2711,7 @@ effort_level = "max"
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
         let err = config.validate_agent_config().unwrap_err();
         assert!(err.to_string().contains("empty or whitespace"));
@@ -2635,6 +2741,7 @@ effort_level = "max"
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
         let err = config.validate_agent_config().unwrap_err();
         assert!(err.to_string().contains("invalid character"));
@@ -2664,6 +2771,7 @@ effort_level = "max"
                     ..Default::default()
                 },
             },
+            update: UpdateConfig::default(),
         };
         assert!(config.validate_agent_config().is_ok());
     }

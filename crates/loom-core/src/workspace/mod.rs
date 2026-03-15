@@ -140,6 +140,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: crate::config::AgentsConfig::default(),
+            update: crate::config::UpdateConfig::default(),
         };
 
         let (path, manifest) = resolve_workspace(Some("my-feature"), dir.path(), &config).unwrap();
@@ -163,6 +164,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: crate::config::AgentsConfig::default(),
+            update: crate::config::UpdateConfig::default(),
         };
 
         let result = resolve_workspace(Some("nonexistent"), dir.path(), &config);
@@ -187,6 +189,7 @@ mod tests {
             repos: BTreeMap::new(),
             specs: None,
             agents: crate::config::AgentsConfig::default(),
+            update: crate::config::UpdateConfig::default(),
         };
 
         let (_, manifest) = resolve_workspace(None, &ws_path, &config).unwrap();

@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+publish = false
 
 [dependencies]
 anyhow.workspace = true
@@ -22,6 +23,9 @@ thiserror.workspace = true
 toml.workspace = true
 toml_edit.workspace = true
 tracing.workspace = true
+
+# Self-update
+self_update.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

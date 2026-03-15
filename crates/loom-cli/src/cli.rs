@@ -138,6 +138,13 @@ pub enum Command {
         preset: Option<String>,
     },
 
+    /// Check for updates and install the latest version
+    Update {
+        /// Only check for updates without installing
+        #[arg(long)]
+        check: bool,
+    },
+
     /// Generate shell completions
     Completions {
         /// Shell to generate for
@@ -992,6 +999,32 @@ impl Cli {
         Ok(())
     }
 
+    fn run_update(check: bool) -> anyhow::Result<()> {
+        let current = env!("CARGO_PKG_VERSION");
+        if check {
+            println!("Current version: v{current}");
+            println!("Checking for updates...");
+            let (_current, latest) = loom_core::update::check_version()?;
+            if latest != current {
+                println!("Update available: v{latest} (current: v{current})");
+            } else {
+                println!("Already up to date (v{current})");
+            }
+            return Ok(());
+        }
+        // Full update: check + download + replace
+        match loom_core::update::check_and_update(true, true)? {
+            Some(v) => {
+                println!("Updated to v{v}. Please restart.");
+                std::process::exit(0);
+            }
+            None => {
+                println!("Already up to date (v{current})");
+            }
+        }
+        Ok(())
+    }
+
     pub fn run(self) -> anyhow::Result<()> {
         match self.command {
             Command::Init => {
@@ -1038,6 +1071,9 @@ impl Cli {
             }
             Command::Refresh { name, preset } => {
                 Self::run_refresh(name, preset)?;
+            }
+            Command::Update { check } => {
+                Self::run_update(check)?;
             }
             Command::Completions { shell } => {
                 use clap::CommandFactory;

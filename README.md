@@ -28,8 +28,11 @@ LOOM creates a centralized workspace directory containing correlated git worktre
 ## Quick Start
 
 ```sh
-# Install
-cargo install --git https://github.com/subotic/loom.git
+# Install (pre-built binary — no Rust toolchain needed)
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/subotic/loom/releases/latest/download/loom-cli-installer.sh | sh
+
+# Or install from source
+cargo install loom-cli
 
 # First-time setup
 loom init
@@ -69,6 +72,7 @@ For detailed usage, flags, and config reference, see **[docs/USER-GUIDE.md](docs
 | `loom down [name]` | Tear down a workspace (safe — warns on dirty repos) |
 | `loom refresh [name]` | Regenerate agent files from current config |
 | `loom tui` | Open the interactive TUI |
+| `loom update` | Check for updates and install the latest version |
 | `loom completions <shell>` | Generate shell completions (bash, zsh, fish, elvish, powershell) |
 
 ## Configuration
@@ -91,7 +95,12 @@ command = "ghostty"                # terminal for `loom shell`
 
 [agents]
 enabled = ["claude-code"]          # agent integrations to generate
+
+# [update]
+# enabled = false                  # disable auto-update (default: true)
 ```
+
+Loom checks for updates hourly on startup and auto-updates transparently. To disable: set `LOOM_DISABLE_UPDATE=1` or add `[update] enabled = false` to config.
 
 ## Agent Integration
 
