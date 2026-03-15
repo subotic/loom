@@ -18,6 +18,7 @@
 | `loom exec <cmd...>` | Run a command across all workspace repos | — |
 | `loom shell [name]` | Open a terminal in the workspace directory | — |
 | `loom refresh [name]` | Regenerate agent files from current config | `--preset` |
+| `loom update` | Check for updates and install latest version | `--check` |
 | `loom tui` | Open the interactive TUI | — |
 | `loom completions <shell>` | Generate shell completions | — |
 
@@ -512,6 +513,26 @@ Useful after editing `config.toml` to regenerate agent files with updated settin
 
 ---
 
+### `loom update`
+
+Check for updates and install the latest version.
+
+```
+loom update [--check]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--check` | Only check for updates without installing. Reports current and latest version. |
+
+Without `--check`, downloads and replaces the binary immediately if a newer version is available.
+
+Loom also checks for updates automatically on startup (once per hour). To disable auto-update:
+- Set `LOOM_DISABLE_UPDATE=1` environment variable (for CI/scripts)
+- Or add `[update] enabled = false` to `~/.config/loom/config.toml`
+
+---
+
 ### `loom tui`
 
 Open the interactive TUI (terminal user interface).
@@ -567,6 +588,7 @@ Configuration lives at `~/.config/loom/config.toml`. Created by `loom init`, edi
 | `[agents.claude-code.mcp_servers.<name>]` | No | No `.mcp.json` generated |
 | `[agents.claude-code.sandbox]` | No | No sandbox isolation |
 | `[agents.claude-code.presets.<name>]` | No | No presets available |
+| `[update]` | No | Auto-update enabled (checks hourly) |
 
 ### Minimal Configuration
 

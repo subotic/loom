@@ -38,6 +38,7 @@ body:
         - label: "`loom save`"
         - label: "`loom open`"
         - label: "`loom registry`"
+        - label: "`loom update`"
         - label: "TUI"
         - label: "New command"
 
