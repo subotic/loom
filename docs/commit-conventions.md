@@ -3,7 +3,7 @@
 ## Commit Organization
 
 ### Principle
-Group commits by topic, not by implementation journey. release-please
+Group commits by topic, not by implementation journey. release-plz
 only picks up `feat:` and `fix:` for the changelog — hidden types
 (`build:`, `ci:`, `docs:`, etc.) are filtered out automatically.
 
@@ -12,7 +12,7 @@ only picks up `feat:` and `fix:` for the changelog — hidden types
    Squash multiple related `feat:` or `fix:` commits into one cohesive
    user-visible change.
 2. Internal work (`build:`, `ci:`, `refactor:`, `docs:`, `chore:`,
-   `test:`) is hidden from changelog by release-please. Keep these as
+   `test:`) is hidden from changelog by release-plz. Keep these as
    **separate topical commits** — they help reviewers understand the
    PR without polluting the changelog.
 3. Ask: "would a user deploying loom care about this change?"
@@ -31,7 +31,7 @@ only picks up `feat:` and `fix:` for the changelog — hidden types
 
 ## Conventional Commits
 
-This repo uses [Conventional Commits](https://www.conventionalcommits.org/) because commits land on `main` via **rebase merge** and feed **release-please** for changelogs and version bumps.
+This repo uses [Conventional Commits](https://www.conventionalcommits.org/) because commits land on `main` via **rebase merge** and feed **release-plz** for changelogs and version bumps.
 
 ### Prefixes
 
