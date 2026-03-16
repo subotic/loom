@@ -8,6 +8,21 @@ changelog_update = false
 # Check for semver-breaking changes
 semver_check = true
 
+[changelog]
+protect_breaking_commits = true
+sort_commits = "oldest"
+
+commit_preprocessors = [
+    { pattern = '\\(#([0-9]+)\\)', replace = "([#${1}](https://github.com/subotic/loom/pull/${1}))" },
+]
+
+commit_parsers = [
+    { message = "^feat", group = "Added" },
+    { message = "^fix", group = "Fixed" },
+    { message = "^perf", group = "Performance" },
+    { message = "^.*", skip = true },
+]
+
 [[package]]
 name = "loom-cli"
 # loom-cli owns the unified root changelog
