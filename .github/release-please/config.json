@@ -20,10 +20,12 @@
   ],
   "packages": {
     "crates/loom-cli": {
-      "component": "loom-cli"
+      "component": "loom-cli",
+      "changelog-path": "/CHANGELOG.md"
     },
     "crates/loom-core": {
-      "component": "loom-core"
+      "component": "loom-core",
+      "skip-changelog": true
     }
   },
   "plugins": [
