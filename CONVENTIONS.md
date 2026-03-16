@@ -25,6 +25,7 @@ Scopes match crate modules and map to conventional commit scopes:
 | `registry/` | `registry` | Repo discovery from scan roots |
 | `sync/` | `sync` | Cross-machine save/open via sync repo |
 | `tui/` | `tui` | Ratatui terminal UI |
+| `update.rs` | `update` | Self-update via GitHub Releases (`self_update` crate) |
 
 ## Config Pattern
 
@@ -64,6 +65,23 @@ if !value.is_empty() {
 - **Booleans** (sandbox.enabled, auto_allow): global only — presets cannot override
 - **MCP servers**: preset overrides global by name (last-wins in BTreeMap insert)
 - **Sandbox paths**: absolute paths converted to `//` prefix via `to_sandbox_path()`; unix sockets are NOT converted
+
+## Output Conventions
+
+Two separate channels for two separate purposes:
+
+| Purpose | Mechanism | Stream | Filterable? |
+|---------|-----------|--------|-------------|
+| Program results (status tables, repo lists, JSON) | `println!` | stdout | No — always shown |
+| Status messages ("Updated to v1.2.3", "Workspace created") | `eprintln!` | stderr | No — always shown |
+| Errors and warnings | `eprintln!` / `anyhow::bail!` | stderr | No — always shown |
+| Internal diagnostics (fetch failures, auto-update debug) | `tracing::debug!` / `tracing::warn!` | stderr | Yes — via `-v` / `RUST_LOG` |
+
+**Rules:**
+- Never use `tracing::info!` for messages the user must see — if someone sets `RUST_LOG=error`, the message disappears
+- `println!` is for output a user expects and might pipe (`loom status | grep dirty`)
+- `eprintln!` is for narration that should not pollute piped output
+- `tracing` is for developer diagnostics only — invisible unless `-v` or `RUST_LOG` is set
 
 ## Error Handling
 
