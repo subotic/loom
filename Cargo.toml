@@ -11,7 +11,7 @@ authors = ["Ivan Subotic <ivan.subotic@gmail.com>"]
 
 [workspace.dependencies]
 # Internal
-loom-core = { path = "crates/loom-core" }
+loom-core = { path = "crates/loom-core", version = "0.1.0" }
 
 # CLI
 clap = { version = "4.5", features = ["derive"] }
@@ -47,6 +47,14 @@ chrono = { version = "0.4", features = ["serde"] }
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Self-update
+self_update = { version = "0.43", default-features = false, features = [
+    "ureq",
+    "rustls",
+    "archive-tar",
+    "compression-flate2",
+] }
 
 # Testing (used as dev-dependency in crates)
 insta = "1.42"

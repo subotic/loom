@@ -23,5 +23,8 @@ toml.workspace = true
 toml_edit.workspace = true
 tracing.workspace = true
 
+# Self-update
+self_update.workspace = true
+
 [dev-dependencies]
 insta.workspace = true
