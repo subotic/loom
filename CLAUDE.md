@@ -6,15 +6,19 @@ See [docs/USER-GUIDE.md](docs/USER-GUIDE.md) for the full user guide.
 
 ## Commit Conventions
 
+**This is critical.** release-please parses commit messages on `main` to generate changelogs and determine version bumps. Malformed commits produce broken changelogs or missed releases.
+
 This repo uses **rebase merges only** — every commit lands on `main` as-is.
 
 - **One topic per commit.** Each commit is a single, self-contained logical change.
 - **Conventional Commits** with scopes (e.g., `feat(config):`, `fix(git):`). Scopes match crate modules.
-- **First line** is the changelog entry — write it for humans.
+- **First line** is the changelog entry — write it for humans. release-please uses it verbatim.
 - **Breaking changes:** add `!` after the type and include a `BREAKING CHANGE:` footer.
+- **Type determines version bump:** `fix:` → patch, `feat:` → minor, `!` / `BREAKING CHANGE:` → major.
+- **Non-release types** (`docs:`, `test:`, `ci:`, `chore:`, `refactor:`, `style:`, `build:`) do not trigger a release on their own.
 
 Full details: [docs/commit-conventions.md](docs/commit-conventions.md)
 
 ## Review Context
 
-See [docs/reviewer-guidelines.md](docs/reviewer-guidelines.md) for the review checklist (docs, CLI ergonomics, Rust quality, security).
+See [REVIEW.md](REVIEW.md) for the review checklist and [CONVENTIONS.md](CONVENTIONS.md) for architectural conventions.

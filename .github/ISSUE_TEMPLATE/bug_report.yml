@@ -29,6 +29,7 @@ body:
         - loom save
         - loom open
         - loom registry
+        - loom update
         - TUI
         - Other
     validations:

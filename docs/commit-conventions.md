@@ -3,12 +3,18 @@
 ## Commit Organization
 
 ### Principle
-Group commits by user-visible impact, not by implementation journey.
+Group commits by topic, not by implementation journey. release-please
+only picks up `feat:` and `fix:` for the changelog — hidden types
+(`build:`, `ci:`, `docs:`, etc.) are filtered out automatically.
 
 ### Rules
-1. Each `feat:` or `fix:` commit = one changelog entry visible to users
+1. Each `feat:` or `fix:` commit = one changelog entry visible to users.
+   Squash multiple related `feat:` or `fix:` commits into one cohesive
+   user-visible change.
 2. Internal work (`build:`, `ci:`, `refactor:`, `docs:`, `chore:`,
-   `test:`) is hidden from changelog -- squash aggressively
+   `test:`) is hidden from changelog by release-please. Keep these as
+   **separate topical commits** — they help reviewers understand the
+   PR without polluting the changelog.
 3. Ask: "would a user deploying loom care about this change?"
    If yes -> `feat:` or `fix:`. If no -> hidden type.
 4. Debugging journeys (trial-and-error, reverts, iterative fixes)
@@ -42,7 +48,7 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) beca
 
 ### Scopes
 
-Scopes match crate modules: `workspace`, `git`, `config`, `manifest`, `sync`, `tui`, `agent`, `registry`, `cli`.
+Scopes match crate modules: `workspace`, `git`, `config`, `manifest`, `sync`, `tui`, `agent`, `registry`, `update`, `cli`.
 Non-code scopes: `learnings`, `ci`.
 
 ### Commit message format
