@@ -1,0 +1,95 @@
+# Changelog
+
+## [0.1.1](https://github.com/subotic/loom/compare/v0.1.0...v0.1.1) (2026-03-16)
+
+
+### Features
+
+* add git abstraction layer with typed errors and worktree support ([cb11841](https://github.com/subotic/loom/commit/cb1184111b1299d63d1988d84d21fca0f5f5ae25))
+* add manifest types with atomic I/O and backup recovery ([7d97dca](https://github.com/subotic/loom/commit/7d97dcafe3be808b68408d1f47ed5577271c1dcf))
+* add repo registry with discovery and URL normalization ([8c282eb](https://github.com/subotic/loom/commit/8c282eb35e6049cf0abe29f13d4720c9dff55fd1))
+* add two-step org/repo selection in `loom new` and TUI wizard ([c53cc4b](https://github.com/subotic/loom/commit/c53cc4b8d31a5df0648e812789c67908caa8e3cc))
+* add workspace detection, CI workflow, and test infrastructure ([3b71dac](https://github.com/subotic/loom/commit/3b71dac1f55930e0566fc187bcf995da37ce9a10))
+* **agent:** extend generate_settings for permissions, sandbox, and presets ([05ccea3](https://github.com/subotic/loom/commit/05ccea3f978c79bc2e43c833851bccdbd47db5c9))
+* **agent:** generate workflow and specs sections in CLAUDE.md ([8b2480f](https://github.com/subotic/loom/commit/8b2480f7f9d90fcbdb40e54a552904cfcb03d9af))
+* **agent:** replace repo config warnings with structured confirmations ([2a4c785](https://github.com/subotic/loom/commit/2a4c785782214023a32013afa7c265ea5d7b5fce))
+* **cli:** add --preset flag to loom new and loom refresh ([5abca3a](https://github.com/subotic/loom/commit/5abca3ab808c41fd3316f528df4a2a8c95192c2c))
+* **cli:** show branch in workspace list ([be697fc](https://github.com/subotic/loom/commit/be697fc6b6ab2be5f5b567cab17647cf0db1537b))
+* **cli:** wire --verbose and --quiet flags to tracing subscriber ([477f01d](https://github.com/subotic/loom/commit/477f01d1105139d8a5da1df4e470a32229d27174))
+* **config:** add allow_local_binding, env, MCP servers, and bare tool names ([5681ebb](https://github.com/subotic/loom/commit/5681ebbc6636144f563ea3e554df43e353025f6d)), closes [#45](https://github.com/subotic/loom/issues/45) [#52](https://github.com/subotic/loom/issues/52)
+* **config:** add allow_unix_sockets setting ([213a86c](https://github.com/subotic/loom/commit/213a86ca82a545b51ecb3e9d3e657a393a98d743))
+* **config:** add ClaudeCodeConfig for marketplace/plugin settings ([a60418f](https://github.com/subotic/loom/commit/a60418fac5026fefb9aa7a8cc3f97d836e47941e)), closes [#13](https://github.com/subotic/loom/issues/13)
+* **config:** add effortLevel support to ClaudeCodeConfig ([5f52ec9](https://github.com/subotic/loom/commit/5f52ec94fce4ad837c86521aa46495c7dad133f0))
+* **config:** add enabled_mcp_servers setting ([0fe1c3c](https://github.com/subotic/loom/commit/0fe1c3ceab058649ed4607a964c62319860e4de8))
+* **config:** add enableWeakerNetworkIsolation to sandbox config ([2382a52](https://github.com/subotic/loom/commit/2382a525f116f6c06c216dc2442d390f70305b2a))
+* **config:** add groups field for named repository collections ([2b5b925](https://github.com/subotic/loom/commit/2b5b9254ade40276df1f6236a519c0acb01a257d))
+* **config:** add interactive security flavor prompt to loom init ([dd39b0f](https://github.com/subotic/loom/commit/dd39b0f5108a9bf445d783af69434b2701fdd3d0))
+* **config:** add permission presets, sandbox, and allowed_tools to ClaudeCodeConfig ([a919d5f](https://github.com/subotic/loom/commit/a919d5f1a000d5f310517cbe1990a3eb28f29cf3))
+* **config:** add Workflow, RepoConfig, SpecsConfig with validation ([19973df](https://github.com/subotic/loom/commit/19973df79e991e7523ec3d938c9a56896798c48f))
+* **config:** append repos/specs examples to generated config.toml ([ad4f992](https://github.com/subotic/loom/commit/ad4f992f280d5fe455f910d77c3d5665bfa7d4f1))
+* **config:** change default workspace folder to ~/workspaces ([d7adb6b](https://github.com/subotic/loom/commit/d7adb6b7d5c0b17776df4884e7213266b5e1d673)), closes [#9](https://github.com/subotic/loom/issues/9)
+* **config:** harden config module with tilde expansion, atomic writes, validation ([63fcee0](https://github.com/subotic/loom/commit/63fcee0e95c1dad00ac05664d5f4e0938b9c2d2f))
+* **config:** support model field in agents.claude-code config ([2624106](https://github.com/subotic/loom/commit/2624106cba9c7bef9ffeb9babf4e49d15ac6c103)), closes [#27](https://github.com/subotic/loom/issues/27)
+* **git:** base worktree branches on remote default branch ([da48c2c](https://github.com/subotic/loom/commit/da48c2cf5eda2ea89f94384d7d33d2165ec95600)), closes [#12](https://github.com/subotic/loom/issues/12)
+* **groups:** add group resolution helper ([69b232c](https://github.com/subotic/loom/commit/69b232c10b7517467afa6cfaf480556466d70cfb))
+* implement agent integration (CLAUDE.md and settings.local.json generation) ([392426b](https://github.com/subotic/loom/commit/392426b8567746705ba7f8096caf34e5a373b944))
+* implement loom add, remove, and down commands ([8f0e320](https://github.com/subotic/loom/commit/8f0e3208abaab287cd282f7c0d18c1a4daba2a76))
+* implement loom exec and loom shell commands ([f301c12](https://github.com/subotic/loom/commit/f301c124daa7408b35918db1300281da69f545d0))
+* implement loom init with interactive prompts ([073aac3](https://github.com/subotic/loom/commit/073aac3bc614d3742594261acd37e6003e6dec04))
+* implement loom list and loom status commands ([6c138be](https://github.com/subotic/loom/commit/6c138bea20dfb037dd0e6dee3ad23537b037fd52))
+* implement loom new with workspace creation and worktree management ([fb0188e](https://github.com/subotic/loom/commit/fb0188e501603c824652293e53a98b3622c7d5e9))
+* implement loom save and loom open (cross-machine sync) ([38e0966](https://github.com/subotic/loom/commit/38e09668e394331896737969b7194d2ec3636c17))
+* implement TUI with ratatui (workspace list, detail, new wizard) ([41a46fe](https://github.com/subotic/loom/commit/41a46fe0ede574cacc11f213eab5f5e60512264c))
+* **manifest:** add branch field to WorkspaceManifest ([15784ce](https://github.com/subotic/loom/commit/15784ce45b3995a1f8757980727d727d3b3764d6))
+* **manifest:** add optional preset field to WorkspaceManifest ([1accb5d](https://github.com/subotic/loom/commit/1accb5d33c620c8212e82ab28a20cfbb63d577bc))
+* **names:** add random name generator with word lists ([6de2cab](https://github.com/subotic/loom/commit/6de2cab43b5a4a73da6492ad34491848bbe9cead))
+* **tui:** change org selection from multi-select to single-select ([1d925e8](https://github.com/subotic/loom/commit/1d925e818e303894719d1dbc1b6644306e3d65dd)), closes [#6](https://github.com/subotic/loom/issues/6)
+* **tui:** show config groups alongside org groups in wizard ([71dc63b](https://github.com/subotic/loom/commit/71dc63b5ae5641e93820cb5218f38f7ee9184dc2))
+* **tui:** support random workspace names in wizard ([23428dd](https://github.com/subotic/loom/commit/23428dd590903e871f6c9167c917f864db0c0ceb))
+* **update:** add self-update mechanism with loom update command ([78d779a](https://github.com/subotic/loom/commit/78d779ae22e3208459963d22c27330b435856b76))
+* **workspace:** use random branch names for new workspaces ([eb5b14d](https://github.com/subotic/loom/commit/eb5b14d02a2fac2a8d7b207695e05c56a5ac6f6c)), closes [#10](https://github.com/subotic/loom/issues/10)
+
+
+### Bug Fixes
+
+* **agent:** convert sandbox paths to // prefix and auto-inject .git dirs ([763ffa7](https://github.com/subotic/loom/commit/763ffa73e9986373f7fa69be70015bbaf7783b4b))
+* **config:** address PR review findings ([7688159](https://github.com/subotic/loom/commit/7688159e246977c6ce40a07e992dab2d8fd48cb3))
+* **docs:** update stale settings.local.json references to settings.json ([5dedd21](https://github.com/subotic/loom/commit/5dedd2129fe9f5acc97c09f663d898d1fb851186))
+* **names:** address review findings for random naming PR ([7985ed0](https://github.com/subotic/loom/commit/7985ed041fe2c8328c1c1af8171249dc6e4cc3e4))
+* **tui:** add defensive guards from PR review ([5526262](https://github.com/subotic/loom/commit/5526262f83dd738709cbc99ed463654a2ad2d3a2))
+* **tui:** guard against empty groups and avoid cloning in Cancel handlers ([88771e7](https://github.com/subotic/loom/commit/88771e768c29a56767d12125de91f8b3acaab2f3))
+* **workspace:** add hint for remote-only branches in --base error ([a27bd94](https://github.com/subotic/loom/commit/a27bd94368546925a6f63bf57764828623e1927c))
+* **workspace:** validate --base after fetching from origin ([87ca1b3](https://github.com/subotic/loom/commit/87ca1b3387564e077f7688188ee8f8c2108645c6)), closes [#16](https://github.com/subotic/loom/issues/16)
+
+## [0.1.1](https://github.com/subotic/loom/compare/v0.1.0...v0.1.1) (2026-03-16)
+
+
+### Features
+
+* add two-step org/repo selection in `loom new` and TUI wizard ([c53cc4b](https://github.com/subotic/loom/commit/c53cc4b8d31a5df0648e812789c67908caa8e3cc))
+* **agent:** replace repo config warnings with structured confirmations ([2a4c785](https://github.com/subotic/loom/commit/2a4c785782214023a32013afa7c265ea5d7b5fce))
+* **cli:** add --groups flag to loom new ([70055d1](https://github.com/subotic/loom/commit/70055d1e3b2fa235650771dcdba753a03dff0ed7))
+* **cli:** add --preset flag to loom new and loom refresh ([5abca3a](https://github.com/subotic/loom/commit/5abca3ab808c41fd3316f528df4a2a8c95192c2c))
+* **cli:** add loom refresh command ([d659bf8](https://github.com/subotic/loom/commit/d659bf8fd259d7a9463ff51913dc398f052a8565))
+* **cli:** add PRESET column to loom list output ([95e3d4e](https://github.com/subotic/loom/commit/95e3d4e19228d8122aaf98d6be6d77759485c3a6))
+* **cli:** change org selection from MultiSelect to Select ([f70bf66](https://github.com/subotic/loom/commit/f70bf66c00bcb29ab8e6d942de4aaa2967b0c53f))
+* **cli:** make workspace name optional in loom new ([73f0f4f](https://github.com/subotic/loom/commit/73f0f4f5a48af46dac3d794e1195ea80f10dc694)), closes [#11](https://github.com/subotic/loom/issues/11)
+* **cli:** show branch in workspace list ([be697fc](https://github.com/subotic/loom/commit/be697fc6b6ab2be5f5b567cab17647cf0db1537b))
+* **cli:** wire --verbose and --quiet flags to tracing subscriber ([477f01d](https://github.com/subotic/loom/commit/477f01d1105139d8a5da1df4e470a32229d27174))
+* **config:** add interactive security flavor prompt to loom init ([dd39b0f](https://github.com/subotic/loom/commit/dd39b0f5108a9bf445d783af69434b2701fdd3d0))
+* **config:** change default workspace folder to ~/workspaces ([d7adb6b](https://github.com/subotic/loom/commit/d7adb6b7d5c0b17776df4884e7213266b5e1d673)), closes [#9](https://github.com/subotic/loom/issues/9)
+* implement agent integration (CLAUDE.md and settings.local.json generation) ([392426b](https://github.com/subotic/loom/commit/392426b8567746705ba7f8096caf34e5a373b944))
+* implement loom add, remove, and down commands ([8f0e320](https://github.com/subotic/loom/commit/8f0e3208abaab287cd282f7c0d18c1a4daba2a76))
+* implement loom exec and loom shell commands ([f301c12](https://github.com/subotic/loom/commit/f301c124daa7408b35918db1300281da69f545d0))
+* implement loom init with interactive prompts ([073aac3](https://github.com/subotic/loom/commit/073aac3bc614d3742594261acd37e6003e6dec04))
+* implement loom list and loom status commands ([6c138be](https://github.com/subotic/loom/commit/6c138bea20dfb037dd0e6dee3ad23537b037fd52))
+* implement loom new with workspace creation and worktree management ([fb0188e](https://github.com/subotic/loom/commit/fb0188e501603c824652293e53a98b3622c7d5e9))
+* implement loom save and loom open (cross-machine sync) ([38e0966](https://github.com/subotic/loom/commit/38e09668e394331896737969b7194d2ec3636c17))
+* implement TUI with ratatui (workspace list, detail, new wizard) ([41a46fe](https://github.com/subotic/loom/commit/41a46fe0ede574cacc11f213eab5f5e60512264c))
+* **update:** add self-update mechanism with loom update command ([78d779a](https://github.com/subotic/loom/commit/78d779ae22e3208459963d22c27330b435856b76))
+
+
+### Bug Fixes
+
+* **config:** address PR review findings ([7688159](https://github.com/subotic/loom/commit/7688159e246977c6ce40a07e992dab2d8fd48cb3))
+* **names:** address review findings for random naming PR ([7985ed0](https://github.com/subotic/loom/commit/7985ed041fe2c8328c1c1af8171249dc6e4cc3e4))
