@@ -9,6 +9,9 @@ changelog_update = false
 semver_check = true
 
 [changelog]
+header = """# Changelog
+All notable changes to this project will be documented in this file.
+"""
 protect_breaking_commits = true
 sort_commits = "oldest"
 
