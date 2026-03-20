@@ -1,0 +1,16 @@
+---
+source: crates/loom-core/src/workspace/list.rs
+assertion_line: 238
+expression: "serde_json::to_string_pretty(&summaries).unwrap()"
+---
+[
+  {
+    "name": "test-ws",
+    "branch": "loom/test-ws",
+    "path": "<WORKSPACE>",
+    "repo_count": 0,
+    "status": "Clean",
+    "created": "2026-01-15T10:00:00Z",
+    "preset": "rust"
+  }
+]

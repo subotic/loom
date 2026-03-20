@@ -16,6 +16,8 @@ pub struct Config {
     pub sync: Option<SyncConfig>,
     #[serde(default)]
     pub terminal: Option<TerminalConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editor: Option<EditorConfig>,
     #[serde(default)]
     pub defaults: DefaultsConfig,
     /// Named repo groups for quick workspace creation.
@@ -39,6 +41,22 @@ pub struct Config {
 pub struct RegistryConfig {
     /// Directories to scan recursively for git repos
     pub scan_roots: Vec<PathBuf>,
+    /// Scan depth for repo discovery: how many directory levels to traverse.
+    /// 1 = flat (root/repo), 2 = org-grouped (root/org/repo, default),
+    /// 3 = host/org/repo, 4 = max.
+    #[serde(
+        default = "default_scan_depth",
+        skip_serializing_if = "is_default_scan_depth"
+    )]
+    pub scan_depth: u8,
+}
+
+fn default_scan_depth() -> u8 {
+    2
+}
+
+fn is_default_scan_depth(v: &u8) -> bool {
+    *v == 2
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +76,12 @@ pub struct SyncConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalConfig {
     /// Terminal command to open (e.g., "ghostty", "wezterm")
+    pub command: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorConfig {
+    /// Editor command to open workspaces (e.g., "code", "cursor", "zed")
     pub command: String,
 }
 
@@ -612,12 +636,14 @@ impl Config {
         Self {
             registry: RegistryConfig {
                 scan_roots: Vec::new(),
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("~/workspaces"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -708,6 +734,22 @@ impl Config {
     /// Full post-load validation: path existence, branch prefix, marketplace/plugin
     /// entries, and all agent config (delegates to [`validate_agent_config()`](Self::validate_agent_config)).
     pub fn validate(&self) -> Result<()> {
+        // Validate scan_depth range
+        if self.registry.scan_depth == 0 || self.registry.scan_depth > 4 {
+            anyhow::bail!(
+                "registry.scan_depth must be between 1 and 4 (got {}). \
+                 1=flat, 2=org-grouped (default), 3=host/org/repo, 4=max.",
+                self.registry.scan_depth
+            );
+        }
+
+        // Validate editor command is not empty
+        if let Some(ref editor) = self.editor
+            && editor.command.trim().is_empty()
+        {
+            anyhow::bail!("editor.command cannot be empty.");
+        }
+
         // Validate scan_roots paths exist
         for root in &self.registry.scan_roots {
             if !root.exists() {
@@ -837,6 +879,7 @@ mod tests {
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/home/user/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/home/user/loom"),
@@ -848,6 +891,7 @@ mod tests {
             terminal: Some(TerminalConfig {
                 command: "ghostty".to_string(),
             }),
+            editor: None,
             defaults: DefaultsConfig {
                 branch_prefix: "loom".to_string(),
             },
@@ -941,12 +985,14 @@ root = "/loom"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().join("workspaces"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -968,12 +1014,14 @@ root = "/loom"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig {
                 branch_prefix: "..invalid".to_string(),
             },
@@ -992,12 +1040,14 @@ root = "/loom"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/nonexistent/path/abc123")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/tmp"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1032,12 +1082,14 @@ root = "/loom"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1088,12 +1140,14 @@ root = "/loom"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1139,12 +1193,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1178,12 +1234,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1211,12 +1269,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1244,12 +1304,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1278,12 +1340,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1338,12 +1402,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1367,12 +1433,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1403,12 +1471,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1474,12 +1544,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1507,12 +1579,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1577,12 +1651,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1610,12 +1686,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1643,12 +1721,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1676,12 +1756,16 @@ enabled = ["claude-code"]
     #[test]
     fn test_validate_allow_unix_sockets_empty_entry() {
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1710,12 +1794,16 @@ enabled = ["claude-code"]
     #[test]
     fn test_validate_allow_unix_sockets_duplicate() {
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1747,12 +1835,16 @@ enabled = ["claude-code"]
     #[test]
     fn test_validate_allow_unix_sockets_relative_path() {
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1780,12 +1872,16 @@ enabled = ["claude-code"]
     #[test]
     fn test_validate_allow_unix_sockets_parent_dir() {
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1813,12 +1909,16 @@ enabled = ["claude-code"]
     #[test]
     fn test_validate_enabled_mcp_servers_empty_entry() {
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1841,12 +1941,16 @@ enabled = ["claude-code"]
     #[test]
     fn test_validate_enabled_mcp_servers_duplicates() {
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1881,12 +1985,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -1930,12 +2036,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2041,12 +2149,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2066,12 +2176,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2091,12 +2203,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2144,12 +2258,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos,
@@ -2185,12 +2301,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos,
@@ -2211,12 +2329,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2255,12 +2375,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: groups.clone(),
             repos: BTreeMap::new(),
@@ -2283,12 +2405,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2326,12 +2450,14 @@ root = "/loom"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups,
             repos: BTreeMap::new(),
@@ -2353,12 +2479,14 @@ root = "/loom"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups,
             repos: BTreeMap::new(),
@@ -2383,12 +2511,14 @@ root = "/loom"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups,
             repos: BTreeMap::new(),
@@ -2413,12 +2543,14 @@ root = "/loom"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups,
             repos: BTreeMap::new(),
@@ -2443,12 +2575,14 @@ root = "/loom"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups,
             repos: BTreeMap::new(),
@@ -2532,12 +2666,14 @@ effort_level = "max"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2568,12 +2704,14 @@ effort_level = "max"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2605,12 +2743,14 @@ effort_level = "max"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2636,12 +2776,14 @@ effort_level = "max"
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![dir.path().to_path_buf()],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2690,12 +2832,16 @@ effort_level = "max"
     #[test]
     fn test_validate_env_key_empty_rejected() {
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2720,12 +2866,16 @@ effort_level = "max"
     #[test]
     fn test_validate_env_key_with_equals_rejected() {
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2750,12 +2900,16 @@ effort_level = "max"
     #[test]
     fn test_validate_env_key_valid_ok() {
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -2922,6 +3076,99 @@ url = "https://grafana.example.com/mcp"
                 "test"
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn test_editor_config_round_trip() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+
+[workspace]
+root = "/loom"
+
+[editor]
+command = "zed"
+"#;
+        let parsed: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(parsed.editor.as_ref().unwrap().command, "zed");
+
+        // Round-trip: serialize and deserialize again
+        let serialized = toml::to_string_pretty(&parsed).unwrap();
+        let reparsed: Config = toml::from_str(&serialized).unwrap();
+        assert_eq!(reparsed.editor.as_ref().unwrap().command, "zed");
+    }
+
+    #[test]
+    fn test_editor_none_suppressed_in_toml() {
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            editor: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
+        };
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        assert!(
+            !toml_str.contains("[editor]"),
+            "editor = None should be suppressed in TOML output"
+        );
+    }
+
+    #[test]
+    fn test_scan_depth_round_trip() {
+        let toml_str = r#"
+[registry]
+scan_roots = ["/code"]
+scan_depth = 3
+
+[workspace]
+root = "/loom"
+"#;
+        let parsed: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(parsed.registry.scan_depth, 3);
+
+        let serialized = toml::to_string_pretty(&parsed).unwrap();
+        let reparsed: Config = toml::from_str(&serialized).unwrap();
+        assert_eq!(reparsed.registry.scan_depth, 3);
+    }
+
+    #[test]
+    fn test_scan_depth_default_suppressed_in_toml() {
+        let config = Config {
+            registry: RegistryConfig {
+                scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2, // default
+            },
+            workspace: WorkspaceConfig {
+                root: PathBuf::from("/loom"),
+            },
+            sync: None,
+            terminal: None,
+            editor: None,
+            defaults: DefaultsConfig::default(),
+            groups: BTreeMap::new(),
+            repos: BTreeMap::new(),
+            specs: None,
+            agents: AgentsConfig::default(),
+            update: UpdateConfig::default(),
+        };
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        assert!(
+            !toml_str.contains("scan_depth"),
+            "default scan_depth should be suppressed in TOML output"
         );
     }
 }

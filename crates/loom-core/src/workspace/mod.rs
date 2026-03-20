@@ -1,9 +1,11 @@
 pub mod add;
 pub mod down;
+pub mod editor;
 pub mod exec;
 pub mod list;
 pub mod new;
 pub mod remove;
+pub mod reset;
 pub mod shell;
 pub mod status;
 
@@ -16,6 +18,23 @@ use crate::manifest::WorkspaceManifest;
 
 /// The manifest filename placed at the workspace root.
 pub const MANIFEST_FILENAME: &str = ".loom.json";
+
+/// Progress event emitted by workspace operations (new, reset).
+/// The CLI layer converts these into progress bar updates.
+pub enum ProgressEvent {
+    RepoStarted {
+        name: String,
+        index: usize,
+        total: usize,
+    },
+    RepoComplete {
+        name: String,
+    },
+    RepoFailed {
+        name: String,
+        error: String,
+    },
+}
 
 /// Detect if `cwd` (or any ancestor) is inside a loom workspace.
 ///
@@ -131,10 +150,14 @@ mod tests {
         create_test_workspace(&ws_root, "my-feature");
 
         let config = Config {
-            registry: crate::config::RegistryConfig { scan_roots: vec![] },
+            registry: crate::config::RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: crate::config::WorkspaceConfig { root: ws_root },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: crate::config::DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -153,12 +176,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         let config = Config {
-            registry: crate::config::RegistryConfig { scan_roots: vec![] },
+            registry: crate::config::RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: crate::config::WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: crate::config::DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -178,12 +205,16 @@ mod tests {
         let ws_path = create_test_workspace(dir.path(), "detected-ws");
 
         let config = Config {
-            registry: crate::config::RegistryConfig { scan_roots: vec![] },
+            registry: crate::config::RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: crate::config::WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: crate::config::DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),

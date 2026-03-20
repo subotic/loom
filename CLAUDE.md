@@ -19,6 +19,16 @@ This repo uses **rebase merges only** — every commit lands on `main` as-is.
 
 Full details: [docs/commit-conventions.md](docs/commit-conventions.md)
 
+## Before Pushing
+
+Run these checks before every push. Do not push if any fail.
+
+```
+cargo fmt --all -- --check
+cargo clippy --workspace -- -D warnings
+cargo test --workspace
+```
+
 ## Review Context
 
 See [REVIEW.md](REVIEW.md) for the review checklist and [CONVENTIONS.md](CONVENTIONS.md) for architectural conventions.

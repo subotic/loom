@@ -521,12 +521,16 @@ mod tests {
 
     fn test_config() -> Config {
         Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),

@@ -1,0 +1,22 @@
+---
+source: crates/loom-core/src/workspace/status.rs
+assertion_line: 180
+expression: "serde_json::to_string_pretty(&redacted).unwrap()"
+---
+{
+  "name": "test-ws",
+  "path": "<WORKSPACE>",
+  "base_branch": "main",
+  "repos": [
+    {
+      "name": "my-repo",
+      "worktree_path": "<WORKTREE>",
+      "branch": "main",
+      "is_dirty": false,
+      "change_count": 0,
+      "ahead": 0,
+      "behind": 0,
+      "exists": true
+    }
+  ]
+}

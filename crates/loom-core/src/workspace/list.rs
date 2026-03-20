@@ -1,13 +1,14 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use serde::Serialize;
 
 use crate::config::Config;
 use crate::git::GitRepo;
 use crate::manifest::{self, WorkspaceManifest};
 
 /// Summary of a single workspace for listing.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct WorkspaceSummary {
     pub name: String,
     pub branch: String,
@@ -19,7 +20,7 @@ pub struct WorkspaceSummary {
 }
 
 /// Health status of a workspace.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum WorkspaceHealth {
     /// All repos clean
     Clean,
@@ -103,10 +104,14 @@ mod tests {
         let ws_root = dir.join("loom");
         std::fs::create_dir_all(ws_root.join(".loom")).unwrap();
         Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig { root: ws_root },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -187,6 +192,50 @@ mod tests {
         let summaries = list_workspaces(&config).unwrap();
         assert_eq!(summaries.len(), 1);
         assert!(matches!(summaries[0].status, WorkspaceHealth::Broken(_)));
+    }
+
+    #[test]
+    fn test_list_json_snapshot() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        let ws_path = config.workspace.root.join("test-ws");
+        std::fs::create_dir_all(&ws_path).unwrap();
+
+        let created = chrono::DateTime::parse_from_rfc3339("2026-01-15T10:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+
+        let manifest = WorkspaceManifest {
+            name: "test-ws".to_string(),
+            branch: Some("loom/test-ws".to_string()),
+            created,
+            base_branch: None,
+            preset: Some("rust".to_string()),
+            repos: vec![],
+        };
+        manifest::write_manifest(
+            &ws_path.join(crate::workspace::MANIFEST_FILENAME),
+            &manifest,
+        )
+        .unwrap();
+
+        let state_path = config.workspace.root.join(".loom").join("state.json");
+        let mut state = manifest::read_global_state(&state_path);
+        state.upsert(WorkspaceIndex {
+            name: "test-ws".to_string(),
+            path: ws_path,
+            created,
+            repo_count: 0,
+        });
+        manifest::write_global_state(&state_path, &state).unwrap();
+
+        let mut summaries = list_workspaces(&config).unwrap();
+        // Redact dynamic path for snapshot stability
+        for s in &mut summaries {
+            s.path = std::path::PathBuf::from("<WORKSPACE>");
+        }
+        insta::assert_snapshot!(serde_json::to_string_pretty(&summaries).unwrap());
     }
 
     #[test]

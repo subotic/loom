@@ -1,5 +1,41 @@
 use clap::{Parser, Subcommand};
 
+/// Create a styled progress indicator for repo-level operations.
+/// Uses spinner + progress bar for multiple repos, spinner-only for single repo.
+fn repo_progress_bar(total: u64, initial_msg: &str) -> indicatif::ProgressBar {
+    let pb = indicatif::ProgressBar::new(total);
+    let template = if total > 1 {
+        "{spinner:.green} {pos}/{len} {msg}"
+    } else {
+        "{spinner:.green} {msg}"
+    };
+    pb.set_style(
+        indicatif::ProgressStyle::default_bar()
+            .template(template)
+            .expect("hardcoded progress bar template"),
+    );
+    pb.enable_steady_tick(std::time::Duration::from_millis(100));
+    pb.set_message(initial_msg.to_string());
+    pb
+}
+
+/// Handle a ProgressEvent by updating the progress bar.
+fn handle_progress(pb: &indicatif::ProgressBar, event: loom_core::workspace::ProgressEvent) {
+    match event {
+        loom_core::workspace::ProgressEvent::RepoStarted { name, .. } => {
+            pb.set_message(format!("{name}..."));
+        }
+        loom_core::workspace::ProgressEvent::RepoComplete { name } => {
+            pb.inc(1);
+            pb.set_message(format!("{name} done"));
+        }
+        loom_core::workspace::ProgressEvent::RepoFailed { name, error } => {
+            pb.inc(1);
+            pb.set_message(format!("{name} failed: {error}"));
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(name = "loom")]
 #[command(about = "Linked Orchestration Of Multirepos — manage git worktrees across repositories")]
@@ -39,11 +75,17 @@ pub enum Command {
         /// Base branch for worktrees (default: repo default branch)
         #[arg(long)]
         base: Option<String>,
+        /// Custom branch name (overrides default {prefix}/{workspace-name})
+        #[arg(long, short = 'b', conflicts_with = "random_branch")]
+        branch: Option<String>,
+        /// Use a random branch name instead of deriving from workspace name
+        #[arg(long, conflicts_with = "branch")]
+        random_branch: bool,
         /// Repos to include (comma-separated, non-interactive mode)
         #[arg(long, value_delimiter = ',')]
         repos: Option<Vec<String>>,
         /// Named repo groups from config.toml (comma-separated)
-        #[arg(long, value_delimiter = ',')]
+        #[arg(long, short = 'g', value_delimiter = ',')]
         groups: Option<Vec<String>>,
         /// Permission preset name (from config.toml)
         #[arg(
@@ -111,6 +153,15 @@ pub enum Command {
         force: bool,
     },
 
+    /// Discard changes and rebase workspace to origin/main
+    Reset {
+        /// Workspace name (optional — detects from cwd if inside a workspace)
+        name: Option<String>,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        force: bool,
+    },
+
     /// Run a command across all repos in a workspace
     Exec {
         /// Command to run
@@ -120,6 +171,12 @@ pub enum Command {
 
     /// Open a shell in the workspace directory
     Shell {
+        /// Workspace name (optional — detects from cwd if inside a workspace)
+        name: Option<String>,
+    },
+
+    /// Open workspace in configured editor
+    Editor {
         /// Workspace name (optional — detects from cwd if inside a workspace)
         name: Option<String>,
     },
@@ -323,12 +380,26 @@ impl Cli {
         Ok(())
     }
 
-    fn run_list() -> anyhow::Result<()> {
+    fn run_list(json: bool) -> anyhow::Result<()> {
         use loom_core::config::ensure_config_loaded;
         use loom_core::workspace::list::{WorkspaceHealth, list_workspaces};
 
         let config = ensure_config_loaded()?;
+        let sp = indicatif::ProgressBar::new_spinner();
+        sp.set_style(
+            indicatif::ProgressStyle::default_spinner()
+                .template("{spinner:.green} {msg}")
+                .expect("hardcoded spinner template"),
+        );
+        sp.enable_steady_tick(std::time::Duration::from_millis(100));
+        sp.set_message("Loading workspaces...");
         let summaries = list_workspaces(&config)?;
+        sp.finish_and_clear();
+
+        if json {
+            println!("{}", serde_json::to_string_pretty(&summaries)?);
+            return Ok(());
+        }
 
         if summaries.is_empty() {
             println!("No workspaces. Run `loom new <name>` to create one.");
@@ -356,7 +427,7 @@ impl Cli {
         Ok(())
     }
 
-    fn run_status(name: Option<String>, fetch: bool) -> anyhow::Result<()> {
+    fn run_status(name: Option<String>, fetch: bool, json: bool) -> anyhow::Result<()> {
         use loom_core::config::ensure_config_loaded;
         use loom_core::workspace;
         use loom_core::workspace::status::workspace_status;
@@ -370,12 +441,17 @@ impl Cli {
             Ok(result) => result,
             Err(_) if name.is_none() => {
                 // Outside workspace with no name → delegate to list
-                return Self::run_list();
+                return Self::run_list(json);
             }
             Err(e) => return Err(e),
         };
 
         let status = workspace_status(&manifest, &ws_path, fetch)?;
+
+        if json {
+            println!("{}", serde_json::to_string_pretty(&status)?);
+            return Ok(());
+        }
 
         println!("Workspace: {}", status.name);
         println!("Path: {}", status.path.display());
@@ -437,18 +513,21 @@ impl Cli {
             workspace::resolve_workspace(workspace_name.as_deref(), &cwd, &config)?;
 
         // Find the repo in registry
-        let all_repos =
-            registry::discover_repos(&config.registry.scan_roots, Some(&config.workspace.root));
+        let all_repos = registry::discover_repos(
+            &config.registry.scan_roots,
+            Some(&config.workspace.root),
+            config.registry.scan_depth,
+        );
         let repo = all_repos
             .iter()
-            .find(|r| r.name == repo_name || format!("{}/{}", r.org, r.name) == repo_name)
+            .find(|r| r.matches_name(&repo_name))
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "Repository '{}' not found in registry. Available: {}",
                     repo_name,
                     all_repos
                         .iter()
-                        .map(|r| format!("{}/{}", r.org, r.name))
+                        .map(|r| r.display_name())
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
@@ -567,6 +646,47 @@ impl Cli {
         Ok(())
     }
 
+    fn run_reset(name: Option<String>, force: bool) -> anyhow::Result<()> {
+        use dialoguer::Confirm;
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::workspace;
+        use loom_core::workspace::reset::reset_workspace;
+
+        let config = ensure_config_loaded()?;
+        let cwd = std::env::current_dir()?;
+
+        let (_ws_path, manifest) = workspace::resolve_workspace(name.as_deref(), &cwd, &config)?;
+
+        if !force {
+            let repo_names: Vec<&str> = manifest.repos.iter().map(|r| r.name.as_str()).collect();
+            let confirm = Confirm::new()
+                .with_prompt(format!(
+                    "This will discard ALL uncommitted changes and reset to origin/main.\n  \
+                     Workspace: {}\n  Repos: {}\n  Continue?",
+                    manifest.name,
+                    repo_names.join(", ")
+                ))
+                .default(false)
+                .interact()?;
+            if !confirm {
+                return Ok(());
+            }
+        }
+
+        let pb = repo_progress_bar(manifest.repos.len() as u64, "Resetting workspace...");
+        let result = reset_workspace(&manifest, |event| handle_progress(&pb, event))?;
+        pb.finish_and_clear();
+
+        eprintln!("Reset {} repo(s).", result.repos_reset.len());
+        if !result.repos_failed.is_empty() {
+            for (name, err) in &result.repos_failed {
+                eprintln!("  Failed to reset {}: {}", name, err);
+            }
+        }
+
+        Ok(())
+    }
+
     fn run_exec(cmd: Vec<String>) -> anyhow::Result<()> {
         use loom_core::config::ensure_config_loaded;
         use loom_core::workspace;
@@ -619,16 +739,42 @@ impl Cli {
         Ok(())
     }
 
+    fn run_editor(name: Option<String>) -> anyhow::Result<()> {
+        use loom_core::config::ensure_config_loaded;
+        use loom_core::workspace;
+        use loom_core::workspace::editor::open_editor;
+
+        let config = ensure_config_loaded()?;
+        let cwd = std::env::current_dir()?;
+
+        let (ws_path, _manifest) = workspace::resolve_workspace(name.as_deref(), &cwd, &config)?;
+
+        let editor = config
+            .editor
+            .as_ref()
+            .map(|e| e.command.as_str())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No editor configured. Add [editor] section to config.toml or run `loom init`."
+                )
+            })?;
+
+        open_editor(editor, &ws_path)?;
+        eprintln!("Opened editor at {}", ws_path.display());
+
+        Ok(())
+    }
+
     fn run_new(
         name: Option<String>,
         base: Option<String>,
+        branch: Option<String>,
+        random_branch: bool,
         repos_filter: Option<Vec<String>>,
         group_filter: Option<Vec<String>>,
         preset: Option<String>,
     ) -> anyhow::Result<()> {
-        use dialoguer::MultiSelect;
         use loom_core::config::ensure_config_loaded;
-        use loom_core::groups::GroupEntry;
         use loom_core::registry;
         use loom_core::workspace::new::{NewWorkspaceOpts, create_workspace};
 
@@ -637,19 +783,18 @@ impl Cli {
         // Generate or use provided name
         let name = match name {
             Some(n) => n,
-            None => {
-                let generated = loom_core::names::generate_unique_workspace_name(
-                    &config.workspace.root,
-                    loom_core::names::MAX_NAME_RETRIES,
-                )?;
-                println!("Generated workspace name: {generated}");
-                generated
-            }
+            None => loom_core::names::generate_unique_workspace_name(
+                &config.workspace.root,
+                loom_core::names::MAX_NAME_RETRIES,
+            )?,
         };
 
         // Discover all repos
-        let all_repos =
-            registry::discover_repos(&config.registry.scan_roots, Some(&config.workspace.root));
+        let all_repos = registry::discover_repos(
+            &config.registry.scan_roots,
+            Some(&config.workspace.root),
+            config.registry.scan_depth,
+        );
         if all_repos.is_empty() {
             anyhow::bail!(
                 "No repositories found in scan roots. Check your config scan_roots paths."
@@ -690,9 +835,7 @@ impl Cli {
             // Add --repos matches
             if let Some(names) = repos_filter {
                 for req_name in &names {
-                    let found = all_repos.iter().find(|r| {
-                        r.name == *req_name || format!("{}/{}", r.org, r.name) == *req_name
-                    });
+                    let found = all_repos.iter().find(|r| r.matches_name(req_name));
                     match found {
                         Some(r) => {
                             if seen_paths.insert(r.path.clone()) {
@@ -704,7 +847,7 @@ impl Cli {
                             req_name,
                             all_repos
                                 .iter()
-                                .map(|r| format!("{}/{}", r.org, r.name))
+                                .map(|r| r.display_name())
                                 .collect::<Vec<_>>()
                                 .join(", ")
                         ),
@@ -720,123 +863,35 @@ impl Cli {
             matched.sort_by(|a, b| (&a.org, &a.name).cmp(&(&b.org, &b.name)));
             matched
         } else {
-            // Interactive: two-step selection (groups → repos)
-
-            // Build combined group list: config groups + org groups
-            let mut group_entries: Vec<GroupEntry> = Vec::new();
-
-            // Add config groups
-            for (name, repo_names) in &config.groups {
-                group_entries.push(GroupEntry::ConfigGroup {
-                    name: name.clone(),
-                    repo_names: repo_names.clone(),
-                });
+            // Interactive: tree-based repo selection
+            let tree = crate::tree_select::build_tree(&all_repos);
+            let selected_indices = crate::tree_select::run(tree)?;
+            if selected_indices.is_empty() {
+                eprintln!("Cancelled.");
+                return Ok(());
             }
-
-            // Add org groups
-            let mut orgs: Vec<String> = all_repos.iter().map(|r| r.org.clone()).collect();
-            orgs.dedup();
-            for org in &orgs {
-                group_entries.push(GroupEntry::OrgGroup { name: org.clone() });
-            }
-
-            // Step 1: Select groups (skip only when no config groups AND ≤ 1 org)
-            let has_config_groups = group_entries
-                .iter()
-                .any(|g| matches!(g, GroupEntry::ConfigGroup { .. }));
-            let org_count = group_entries
-                .iter()
-                .filter(|g| matches!(g, GroupEntry::OrgGroup { .. }))
-                .count();
-            let selected_group_entries = if !has_config_groups && org_count <= 1 {
-                group_entries
-            } else {
-                let labels: Vec<String> = group_entries
-                    .iter()
-                    .map(|g| match g {
-                        GroupEntry::ConfigGroup { name, repo_names } => {
-                            format!("[G] {} ({} repos)", name, repo_names.len())
-                        }
-                        GroupEntry::OrgGroup { name } => {
-                            let count = all_repos.iter().filter(|r| r.org == *name).count();
-                            format!("[O] {} ({} repos)", name, count)
-                        }
-                    })
-                    .collect();
-                let selections = MultiSelect::new()
-                    .with_prompt("Select groups")
-                    .items(&labels)
-                    .interact()?;
-                if selections.is_empty() {
-                    anyhow::bail!("No groups selected.");
-                }
-                selections
-                    .into_iter()
-                    .map(|i| group_entries[i].clone())
-                    .collect()
-            };
-
-            // Step 2: Filter repos based on selected groups, then pick individual repos
-            let mut pre_selected: std::collections::HashSet<usize> =
-                std::collections::HashSet::new();
-            let mut filtered_indices: Vec<usize> = Vec::new();
-            let mut seen_idx: std::collections::HashSet<usize> = std::collections::HashSet::new();
-
-            for entry in &selected_group_entries {
-                match entry {
-                    GroupEntry::ConfigGroup { repo_names, .. } => {
-                        for (i, r) in all_repos.iter().enumerate() {
-                            let matches = repo_names
-                                .iter()
-                                .any(|rn| r.name == *rn || format!("{}/{}", r.org, r.name) == *rn);
-                            if matches && seen_idx.insert(i) {
-                                filtered_indices.push(i);
-                                pre_selected.insert(filtered_indices.len() - 1);
-                            }
-                        }
-                    }
-                    GroupEntry::OrgGroup { name } => {
-                        for (i, r) in all_repos.iter().enumerate() {
-                            if r.org == *name && seen_idx.insert(i) {
-                                filtered_indices.push(i);
-                            }
-                        }
-                    }
-                }
-            }
-
-            let filtered: Vec<&loom_core::registry::RepoEntry> =
-                filtered_indices.iter().map(|&i| &all_repos[i]).collect();
-            let labels: Vec<String> = filtered
-                .iter()
-                .map(|r| format!("{}/{}", r.org, r.name))
-                .collect();
-            let defaults: Vec<bool> = (0..labels.len())
-                .map(|i| pre_selected.contains(&i))
-                .collect();
-            let selections = MultiSelect::new()
-                .with_prompt("Select repositories for this workspace")
-                .items(&labels)
-                .defaults(&defaults)
-                .interact()?;
-            if selections.is_empty() {
-                anyhow::bail!("No repositories selected.");
-            }
-            selections
+            selected_indices
                 .into_iter()
-                .map(|i| filtered[i].clone())
+                .map(|i| all_repos[i].clone())
                 .collect()
         };
+
+        let pb = repo_progress_bar(selected_repos.len() as u64, "Creating workspace...");
 
         let result = create_workspace(
             &config,
             NewWorkspaceOpts {
                 name,
+                branch,
+                random_branch,
                 repos: selected_repos,
                 base_branch: base,
                 preset,
             },
+            |event| handle_progress(&pb, event),
         )?;
+
+        pb.finish_and_clear();
 
         // Report results
         println!(
@@ -1032,11 +1087,13 @@ impl Cli {
             Command::New {
                 name,
                 base,
+                branch,
+                random_branch,
                 repos,
                 groups,
                 preset,
             } => {
-                Self::run_new(name, base, repos, groups, preset)?;
+                Self::run_new(name, base, branch, random_branch, repos, groups, preset)?;
             }
             Command::Add { repo, workspace } => {
                 Self::run_add(repo, workspace)?;
@@ -1045,10 +1102,10 @@ impl Cli {
                 Self::run_remove(repo, force)?;
             }
             Command::List => {
-                Self::run_list()?;
+                Self::run_list(self.json)?;
             }
             Command::Status { name, fetch } => {
-                Self::run_status(name, fetch)?;
+                Self::run_status(name, fetch, self.json)?;
             }
             Command::Save { force } => {
                 Self::run_save(force)?;
@@ -1062,11 +1119,17 @@ impl Cli {
             Command::Down { name, force } => {
                 Self::run_down(name, force)?;
             }
+            Command::Reset { name, force } => {
+                Self::run_reset(name, force)?;
+            }
             Command::Exec { cmd } => {
                 Self::run_exec(cmd)?;
             }
             Command::Shell { name } => {
                 Self::run_shell(name)?;
+            }
+            Command::Editor { name } => {
+                Self::run_editor(name)?;
             }
             Command::Refresh { name, preset } => {
                 Self::run_refresh(name, preset)?;

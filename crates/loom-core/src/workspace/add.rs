@@ -113,10 +113,14 @@ mod tests {
         let ws_root = dir.join("loom");
         std::fs::create_dir_all(ws_root.join(".loom")).unwrap();
         Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig { root: ws_root },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),

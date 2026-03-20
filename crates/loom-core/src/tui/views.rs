@@ -311,11 +311,7 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
                     } else {
                         Style::default()
                     };
-                    Row::new(vec![
-                        Cell::new(marker),
-                        Cell::new(format!("{}/{}", repo.org, repo.name)),
-                    ])
-                    .style(style)
+                    Row::new(vec![Cell::new(marker), Cell::new(repo.display_name())]).style(style)
                 })
                 .collect();
 
@@ -330,11 +326,7 @@ fn render_new_wizard(app: &App, frame: &mut Frame, area: Rect) {
         WizardStep::Confirm => {
             let selected_names: Vec<String> = selected
                 .iter()
-                .filter_map(|&i| {
-                    available_repos
-                        .get(i)
-                        .map(|r| format!("{}/{}", r.org, r.name))
-                })
+                .filter_map(|&i| available_repos.get(i).map(|r| r.display_name()))
                 .collect();
 
             let text = vec![

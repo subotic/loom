@@ -82,8 +82,11 @@ pub fn open_workspace(config: &Config, name: &str) -> Result<OpenResult> {
     };
 
     // Discover local repos for URL matching
-    let local_repos =
-        registry::discover_repos(&config.registry.scan_roots, Some(&config.workspace.root));
+    let local_repos = registry::discover_repos(
+        &config.registry.scan_roots,
+        Some(&config.workspace.root),
+        config.registry.scan_depth,
+    );
 
     let mut repos_restored = 0;
     let mut repos_cloned = Vec::new();
@@ -344,12 +347,14 @@ mod tests {
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -367,12 +372,14 @@ mod tests {
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/home/user/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -388,12 +395,16 @@ mod tests {
     #[test]
     fn test_derive_clone_path_no_scan_roots() {
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/loom"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -410,12 +421,16 @@ mod tests {
     fn test_open_no_sync_config() {
         let dir = tempfile::tempdir().unwrap();
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: dir.path().to_path_buf(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -463,13 +478,17 @@ mod tests {
         std::fs::create_dir_all(ws_root.join(".loom")).unwrap();
 
         let config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig { root: ws_root },
             sync: Some(SyncConfig {
                 repo: sync_repo_path,
                 path: "loom".to_string(),
             }),
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),

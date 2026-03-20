@@ -36,12 +36,14 @@ pub fn create_test_config(scan_root: &Path, workspace_root: &Path) -> Config {
     Config {
         registry: RegistryConfig {
             scan_roots: vec![scan_root.to_path_buf()],
+            scan_depth: 2,
         },
         workspace: WorkspaceConfig {
             root: workspace_root.to_path_buf(),
         },
         sync: None,
         terminal: None,
+        editor: None,
         defaults: DefaultsConfig::default(),
         groups: BTreeMap::new(),
         repos: BTreeMap::new(),
