@@ -47,6 +47,12 @@ pub fn exec_in_workspace(manifest: &WorkspaceManifest, cmd: &[String]) -> Result
         }
 
         eprintln!("=== {} ===", repo.name);
+        tracing::debug!(
+            repo = %repo.name,
+            command = %cmd.join(" "),
+            dir = %repo.worktree_path.display(),
+            "executing command"
+        );
 
         let status = Command::new(&cmd[0])
             .args(&cmd[1..])
@@ -64,7 +70,18 @@ pub fn exec_in_workspace(manifest: &WorkspaceManifest, cmd: &[String]) -> Result
                 });
             }
             Err(e) => {
-                eprintln!("  Error: {}", e);
+                eprintln!(
+                    "  Failed to run '{}' in {}: {}",
+                    cmd[0],
+                    repo.worktree_path.display(),
+                    e
+                );
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    eprintln!(
+                        "  Hint: '{}' was not found in PATH. Check your shell environment.",
+                        cmd[0]
+                    );
+                }
                 results.push(RepoExecResult {
                     repo_name: repo.name.clone(),
                     exit_code: -1,
@@ -151,5 +168,38 @@ mod tests {
             exec_in_workspace(&manifest, &["echo".to_string(), "hello".to_string()]).unwrap();
         assert!(!result.all_success());
         assert_eq!(result.results[0].exit_code, -1);
+    }
+
+    #[test]
+    fn test_exec_command_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_path = dir.path().join("my-repo");
+        std::fs::create_dir_all(&repo_path).unwrap();
+        std::process::Command::new("git")
+            .args(["init", "-b", "main", &repo_path.to_string_lossy()])
+            .env("LC_ALL", "C")
+            .output()
+            .unwrap();
+
+        let manifest = WorkspaceManifest {
+            name: "test-ws".to_string(),
+            branch: None,
+            created: chrono::Utc::now(),
+            base_branch: None,
+            preset: None,
+            repos: vec![RepoManifestEntry {
+                name: "my-repo".to_string(),
+                original_path: repo_path.clone(),
+                worktree_path: repo_path,
+                branch: "main".to_string(),
+                remote_url: String::new(),
+            }],
+        };
+
+        let result =
+            exec_in_workspace(&manifest, &["nonexistent-binary-xyz-12345".to_string()]).unwrap();
+        assert!(!result.all_success());
+        assert_eq!(result.results[0].exit_code, -1);
+        assert!(!result.results[0].success);
     }
 }
