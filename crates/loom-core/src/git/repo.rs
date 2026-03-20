@@ -243,6 +243,30 @@ impl GitRepo {
         Ok(())
     }
 
+    /// Hard reset to HEAD (discard all staged and unstaged changes)
+    pub fn reset_hard(&self) -> Result<(), GitError> {
+        self.git().args(&["reset", "--hard", "HEAD"]).run()?;
+        Ok(())
+    }
+
+    /// Hard reset to a specific ref
+    pub fn reset_hard_to(&self, target: &str) -> Result<(), GitError> {
+        self.git().args(&["reset", "--hard", target]).run()?;
+        Ok(())
+    }
+
+    /// Remove untracked files and directories
+    pub fn clean_untracked(&self) -> Result<(), GitError> {
+        self.git().args(&["clean", "-fd"]).run()?;
+        Ok(())
+    }
+
+    /// Rebase current branch onto a target ref
+    pub fn rebase(&self, target: &str) -> Result<(), GitError> {
+        self.git().args(&["rebase", target]).run()?;
+        Ok(())
+    }
+
     /// Stage a file
     pub fn add(&self, path: &str) -> Result<(), GitError> {
         self.git().args(&["add", path]).run()?;
