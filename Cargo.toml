@@ -10,7 +10,7 @@ authors = ["Ivan Subotic <ivan.subotic@gmail.com>"]
 
 [workspace.dependencies]
 # Internal
-loom-core = { path = "crates/loom-core", version = "0.1.0" }
+loom-core = { path = "crates/loom-core", version = "0.2.0" }
 
 # CLI
 clap = { version = "4.5", features = ["derive"] }
