@@ -5,14 +5,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- *(workspace)* add loom editor and loom reset commands
-- *(registry)* configurable scan_depth for flexible directory layouts
-- *(cli)* wire new commands, add flags, branch naming, and progress
+- *(workspace)* add loom editor and loom reset commands ([#46](https://github.com/subotic/loom/issues/46), [#48](https://github.com/subotic/loom/issues/48), [#51](https://github.com/subotic/loom/issues/51))
+- *(registry)* configurable scan_depth for flexible directory layouts ([#36](https://github.com/subotic/loom/issues/36), [#39](https://github.com/subotic/loom/issues/39), [#50](https://github.com/subotic/loom/issues/50))
+- *(cli)* wire new commands, add flags, branch naming, and progress ([#40](https://github.com/subotic/loom/issues/40), [#44](https://github.com/subotic/loom/issues/44), [#45](https://github.com/subotic/loom/issues/45), [#49](https://github.com/subotic/loom/issues/49))
 
 ### Fixed
 
-- *(exec)* show command name, directory, and PATH hints on failure
-- *(shell)* detect Ghostty.app on macOS and use `open -a` at runtime
+- *(exec)* show command name, directory, and PATH hints on failure ([#41](https://github.com/subotic/loom/issues/41), [#43](https://github.com/subotic/loom/issues/43))
+- *(shell)* detect Ghostty.app on macOS and use `open -a` at runtime ([#42](https://github.com/subotic/loom/issues/42))
 
 ## [0.1.0] - 2026-03-17
 
