@@ -81,6 +81,7 @@ not found in the workspace root.
 
 ```
 Closes #<issue-number>
+Closes #<issue-number>
 
 ## Motivation
 Why this work was needed. What problem it solves for users.
@@ -107,6 +108,22 @@ actionable -- not just "this is hard" but "do X instead of Y".
 
 ## Test Plan
 - [ ] verification steps
+```
+
+### Closing issues
+
+Use one `Closes` keyword per issue, each on its own line. Do NOT
+comma-separate multiple issues on one line — GitHub may silently
+skip some of them.
+
+```
+# Good
+Closes #39
+Closes #40
+Closes #41
+
+# Bad — GitHub may not close all of them
+Closes #39, #40, #41
 ```
 
 ### Why this format matters
