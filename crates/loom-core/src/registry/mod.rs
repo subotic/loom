@@ -10,7 +10,8 @@ pub use url::{CanonicalUrl, normalize_url};
 pub struct RepoEntry {
     /// Short display name (basename, or `org/repo` if ambiguous)
     pub name: String,
-    /// Organization/owner directory name
+    /// Organization/owner directory name (may be empty for flat layouts,
+    /// or contain path separators for deep layouts like "github.com/org")
     pub org: String,
     /// Absolute path to the repository root
     pub path: PathBuf,
@@ -18,14 +19,39 @@ pub struct RepoEntry {
     pub remote_url: Option<String>,
 }
 
+impl RepoEntry {
+    /// Display name: bare name for flat layout, org/name for grouped layout.
+    pub fn display_name(&self) -> String {
+        if self.org.is_empty() {
+            self.name.clone()
+        } else {
+            format!("{}/{}", self.org, self.name)
+        }
+    }
+
+    /// Check if this entry matches a query string (bare name or org-qualified name).
+    pub fn matches_name(&self, query: &str) -> bool {
+        self.name == query || self.display_name() == query
+    }
+}
+
 /// Discover git repositories under the given scan roots.
 ///
-/// Scan depth: `{scan_root}/{org}/{repo}` (exactly 2 levels).
-/// Convention: repos live at `~/code/{org}/{repo}`.
+/// Recursively scans up to `scan_depth` levels deep. At any level, if a directory
+/// contains `.git`, it's treated as a repo and not recursed into.
+///
+/// - depth 1: flat (`root/repo`)
+/// - depth 2: org-grouped (`root/org/repo`, default)
+/// - depth 3: `root/host/org/repo`
+/// - depth 4: max
 ///
 /// Deduplicates across overlapping scan_roots using canonical paths.
 /// Excludes directories under `workspace_root` (avoids scanning worktrees).
-pub fn discover_repos(scan_roots: &[PathBuf], workspace_root: Option<&Path>) -> Vec<RepoEntry> {
+pub fn discover_repos(
+    scan_roots: &[PathBuf],
+    workspace_root: Option<&Path>,
+    scan_depth: u8,
+) -> Vec<RepoEntry> {
     let mut seen_paths: HashSet<PathBuf> = HashSet::new();
     let mut entries = Vec::new();
 
@@ -38,87 +64,15 @@ pub fn discover_repos(scan_roots: &[PathBuf], workspace_root: Option<&Path>) -> 
             Err(_) => continue, // Skip non-existent roots
         };
 
-        // Read org-level directories (depth 1)
-        let org_dirs = match std::fs::read_dir(&root) {
-            Ok(entries) => entries,
-            Err(_) => continue,
-        };
-
-        for org_entry in org_dirs.flatten() {
-            let org_path = org_entry.path();
-            if !org_path.is_dir() {
-                continue;
-            }
-
-            // Skip workspace root to avoid scanning worktrees as repos
-            if let Some(ref ws) = ws_canonical
-                && (org_path.starts_with(ws) || ws.starts_with(&org_path))
-            {
-                continue;
-            }
-
-            let org_name = org_entry.file_name().to_string_lossy().to_string();
-
-            // Skip hidden directories
-            if org_name.starts_with('.') {
-                continue;
-            }
-
-            // Read repo-level directories (depth 2)
-            let repo_dirs = match std::fs::read_dir(&org_path) {
-                Ok(entries) => entries,
-                Err(_) => continue,
-            };
-
-            for repo_entry in repo_dirs.flatten() {
-                let repo_path = repo_entry.path();
-                if !repo_path.is_dir() {
-                    continue;
-                }
-
-                let repo_name = repo_entry.file_name().to_string_lossy().to_string();
-
-                // Skip hidden directories
-                if repo_name.starts_with('.') {
-                    continue;
-                }
-
-                // Check if it's a git repo
-                if !repo_path.join(".git").exists() {
-                    continue;
-                }
-
-                // Deduplicate by canonical path
-                let canonical = match std::fs::canonicalize(&repo_path) {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
-
-                // Skip if under workspace root
-                if let Some(ref ws) = ws_canonical
-                    && canonical.starts_with(ws)
-                {
-                    continue;
-                }
-
-                if !seen_paths.insert(canonical) {
-                    continue; // Already discovered
-                }
-
-                // Get remote URL (best effort)
-                let remote_url = crate::git::GitRepo::new(&repo_path)
-                    .remote_url()
-                    .ok()
-                    .flatten();
-
-                entries.push(RepoEntry {
-                    name: repo_name,
-                    org: org_name.clone(),
-                    path: repo_path,
-                    remote_url,
-                });
-            }
-        }
+        scan_recursive(
+            &root,
+            &root,
+            scan_depth,
+            0,
+            &ws_canonical,
+            &mut seen_paths,
+            &mut entries,
+        );
     }
 
     // Handle name collisions: disambiguate repos with the same basename
@@ -128,6 +82,83 @@ pub fn discover_repos(scan_roots: &[PathBuf], workspace_root: Option<&Path>) -> 
     entries.sort_by(|a, b| (&a.org, &a.name).cmp(&(&b.org, &b.name)));
 
     entries
+}
+
+fn scan_recursive(
+    root: &Path,
+    current: &Path,
+    max_depth: u8,
+    current_depth: u8,
+    ws_canonical: &Option<PathBuf>,
+    seen_paths: &mut HashSet<PathBuf>,
+    entries: &mut Vec<RepoEntry>,
+) {
+    let dir_entries = match std::fs::read_dir(current) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in dir_entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        // Skip hidden directories
+        if name.starts_with('.') {
+            continue;
+        }
+
+        // Skip workspace root to avoid scanning worktrees as repos
+        if let Some(ws) = ws_canonical
+            && let Ok(canonical) = std::fs::canonicalize(&path)
+            && (canonical.starts_with(ws) || ws.starts_with(&canonical))
+        {
+            continue;
+        }
+
+        // Check if this is a git repo
+        if path.join(".git").exists() {
+            // Found a repo — compute org from path relative to root
+            let relative = path.strip_prefix(root).unwrap_or(&path);
+            let org = relative
+                .parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Deduplicate by canonical path
+            let canonical = match std::fs::canonicalize(&path) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            if !seen_paths.insert(canonical) {
+                continue;
+            }
+
+            // Get remote URL (best effort)
+            let remote_url = crate::git::GitRepo::new(&path).remote_url().ok().flatten();
+
+            entries.push(RepoEntry {
+                name,
+                org,
+                path,
+                remote_url,
+            });
+        } else if current_depth + 1 < max_depth {
+            // Not a repo — recurse deeper if within depth limit
+            scan_recursive(
+                root,
+                &path,
+                max_depth,
+                current_depth + 1,
+                ws_canonical,
+                seen_paths,
+                entries,
+            );
+        }
+    }
 }
 
 /// Find a local repo matching a remote URL via canonical URL comparison.
@@ -173,7 +204,7 @@ mod tests {
             .output()
             .unwrap();
 
-        let entries = discover_repos(&[root.to_path_buf()], None);
+        let entries = discover_repos(&[root.to_path_buf()], None, 2);
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "myrepo");
         assert_eq!(entries[0].org, "myorg");
@@ -188,7 +219,7 @@ mod tests {
         let repo_path = root.join("myorg").join("not-a-repo");
         std::fs::create_dir_all(&repo_path).unwrap();
 
-        let entries = discover_repos(&[root.to_path_buf()], None);
+        let entries = discover_repos(&[root.to_path_buf()], None, 2);
         assert_eq!(entries.len(), 0);
     }
 
@@ -206,7 +237,7 @@ mod tests {
             .output()
             .unwrap();
 
-        let entries = discover_repos(&[root.to_path_buf()], None);
+        let entries = discover_repos(&[root.to_path_buf()], None, 2);
         assert_eq!(entries.len(), 0);
     }
 
@@ -225,7 +256,7 @@ mod tests {
             .unwrap();
 
         // Scan the same root twice — should still find only 1
-        let entries = discover_repos(&[root.to_path_buf(), root.to_path_buf()], None);
+        let entries = discover_repos(&[root.to_path_buf(), root.to_path_buf()], None, 2);
         assert_eq!(entries.len(), 1);
     }
 
@@ -245,7 +276,7 @@ mod tests {
             .unwrap();
 
         // Should exclude repos under workspace root
-        let entries = discover_repos(&[root.to_path_buf()], Some(&ws_root));
+        let entries = discover_repos(&[root.to_path_buf()], Some(&ws_root), 2);
         assert_eq!(entries.len(), 0);
     }
 
@@ -265,7 +296,7 @@ mod tests {
                 .unwrap();
         }
 
-        let entries = discover_repos(&[root.to_path_buf()], None);
+        let entries = discover_repos(&[root.to_path_buf()], None, 2);
         assert_eq!(entries.len(), 2);
 
         // Both should be disambiguated with org prefix
