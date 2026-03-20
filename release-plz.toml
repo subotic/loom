@@ -1,8 +1,9 @@
 [workspace]
 # Let cargo-dist create the GitHub Release (it attaches binaries)
 git_release_enable = false
-# Tag format matching cargo-dist expectations
-git_tag_name = "v{{ version }}"
+# Disable tagging at workspace level — only loom-cli creates the single tag
+# (prevents "Reference already exists" when both crates share the same tag name)
+git_tag_enable = false
 # Disable per-package changelogs by default
 changelog_update = false
 # Check for semver-breaking changes
@@ -28,11 +29,12 @@ commit_parsers = [
 
 [[package]]
 name = "loom-cli"
-# loom-cli owns the unified root changelog
+# loom-cli owns the unified root changelog and the single git tag
 changelog_update = true
 changelog_path = "./CHANGELOG.md"
-# Include loom-core commits in the same changelog
 changelog_include = ["loom-core"]
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
 version_group = "loom"
 
 [[package]]
