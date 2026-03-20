@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - *(exec)* show command name, directory, and PATH hints on failure
+- *(shell)* detect Ghostty.app on macOS and use `open -a` at runtime
 
 ## [0.1.0] - 2026-03-17
 
