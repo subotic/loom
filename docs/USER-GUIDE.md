@@ -7,16 +7,18 @@
 | Command | Description | Key Flags |
 |---------|-------------|-----------|
 | `loom init` | First-run setup — creates `~/.config/loom/config.toml` | — |
-| `loom new [name]` | Create a workspace with correlated worktrees | `--base`, `--repos`, `--groups`, `--preset` |
+| `loom new [name]` | Create a workspace with correlated worktrees | `--base`, `--branch`/`-b`, `--random-branch`, `--repos`, `--groups`/`-g`, `--preset` |
 | `loom add <repo>` | Add a repo to an existing workspace | `--workspace` |
 | `loom remove <repo>` | Remove a repo from the current workspace | `--force` |
-| `loom list` / `loom ls` | List all workspaces | — |
-| `loom status [name]` | Show repo status in a workspace | `--fetch` |
+| `loom list` / `loom ls` | List all workspaces | `--json` |
+| `loom status [name]` | Show repo status in a workspace | `--fetch`, `--json` |
 | `loom save` | Push workspace branches (+ sync manifest) | `--force` |
 | `loom open <name>` | Restore a workspace from sync manifest | — |
 | `loom down [name]` | Tear down a workspace (remove worktrees) | `--force` |
+| `loom reset [name]` | Discard changes and rebase to base branch | `--force` |
 | `loom exec <cmd...>` | Run a command across all workspace repos | — |
 | `loom shell [name]` | Open a terminal in the workspace directory | — |
+| `loom editor [name]` | Open workspace in configured editor | — |
 | `loom refresh [name]` | Regenerate agent files from current config | `--preset` |
 | `loom update` | Check for updates and install latest version | `--check` |
 | `loom tui` | Open the interactive TUI | — |
@@ -71,23 +73,24 @@ cargo install loom-cli
 
 ### Scan Root Convention
 
-LOOM discovers repositories at exactly **two levels** below each scan root: `{scan_root}/{org}/{repo}`. Repos at other depths are invisible.
+LOOM discovers repositories by scanning directories under each scan root. The scan depth is configurable via `registry.scan_depth` (default: 2, range: 1-4).
 
 ```
+# scan_depth = 2 (default, org-grouped)
 ~/_github.com/                  ← scan root
 ├── dasch-swiss/                ← org level
-│   ├── dsp-api/       ✓       ← discovered (2 levels deep)
+│   ├── dsp-api/       ✓       ← discovered
 │   ├── dsp-das/       ✓       ← discovered
 │   └── ops-deploy/    ✓       ← discovered
 ├── subotic/
 │   └── loom/          ✓       ← discovered
 └── README.md                   ← ignored (not a directory)
 
-~/code/
-├── myproject/         ✗       ← NOT found (only 1 level deep)
-└── org/
-    └── repo/
-        └── subdir/    ✗       ← NOT found (3 levels deep)
+# scan_depth = 1 (flat layout)
+~/repos/
+├── dsp-api/           ✓       ← discovered directly
+├── loom/              ✓       ← discovered directly
+└── notes/             ✗       ← no .git, ignored
 ```
 
 This convention matches the layout used by [ghq](https://github.com/x-motemen/ghq) and Go's `GOPATH`. If your repos aren't discovered, check the depth first.
@@ -120,7 +123,7 @@ $ loom init
 
 **Notes:**
 - LOOM auto-detects candidate scan roots from common locations (`~/_github.com`, `~/src`, `~/code`, `~/repos`, `~/Projects`, `~/dev`).
-- Terminal detection reads the `TERM_PROGRAM` environment variable and maps it: `ghostty` → `ghostty`, `WezTerm` → `wezterm`, `iTerm.app` → `open -a iTerm`, `Apple_Terminal` → `open -a Terminal`, `vscode` → `code`.
+- Terminal detection reads the `TERM_PROGRAM` environment variable and maps it: `ghostty` → `open -a Ghostty` (macOS) or `ghostty` (Linux), `WezTerm` → `wezterm`, `iTerm.app` → `open -a iTerm`, `Apple_Terminal` → `open -a Terminal`, `vscode` → `code`. On macOS, `terminal.command = "ghostty"` is automatically handled as `open -a Ghostty` at runtime.
 - **Re-running `loom init`**: if a config already exists, LOOM asks before overwriting. Agent settings (`[agents]` section) are preserved during re-init — only `[registry]`, `[workspace]`, `[terminal]`, and `[defaults]` are updated.
 
 ### First Workspace: 5-Step Walkthrough
@@ -211,7 +214,7 @@ Everything else is optional. See [Configuration Reference](#configuration-refere
 > - `-q` / `--quiet` — suppress all output except errors.
 > - `RUST_LOG=debug` — environment variable that overrides the verbosity flag (e.g., `RUST_LOG=loom_core=trace`).
 > - `--no-color` / `NO_COLOR` — disable colored output (not yet wired to log output).
-> - `--json` — machine-readable output (planned).
+> - `--json` — machine-readable JSON output (supported by `loom list` and `loom status`).
 
 ### `loom init`
 
@@ -235,15 +238,17 @@ No arguments, no flags — fully interactive. See [Setting Up: loom init](#setti
 Create a new workspace with correlated worktrees.
 
 ```
-loom new [NAME] [--base BRANCH] [--repos REPO,...] [--groups GROUP,...] [--preset NAME]
+loom new [NAME] [--base BRANCH] [--branch/-b NAME] [--random-branch] [--repos REPO,...] [--groups/-g GROUP,...] [--preset NAME]
 ```
 
 | Flag | Description |
 |------|-------------|
 | `[NAME]` | Workspace name. Optional — a random `adjective-modifier-noun` name is generated if omitted. |
 | `--base BRANCH` | Base branch for worktrees (default: each repo's default branch). Fetches and validates the ref exists. |
+| `--branch`/`-b NAME` | Custom branch name (overrides default `{prefix}/{workspace-name}`). Mutually exclusive with `--random-branch`. |
+| `--random-branch` | Use a random branch name instead of deriving from workspace name. Mutually exclusive with `--branch`. |
 | `--repos REPO,...` | Comma-separated repo names. Skips interactive repo selection. |
-| `--groups GROUP,...` | Comma-separated group names from `[groups]` config. Either `--repos` or `--groups` (or both) enables non-interactive mode. |
+| `--groups`/`-g GROUP,...` | Comma-separated group names from `[groups]` config. Either `--repos` or `--groups` (or both) enables non-interactive mode. |
 | `--preset NAME` | Apply a named permission preset from config.toml. |
 
 **Examples:**
@@ -271,7 +276,7 @@ Workspace 'amber-swift-fox' created at /Users/you/workspaces/amber-swift-fox
 **Notes:**
 - **Workspace name** and **branch name** are independently generated. The manifest stores the branch name; older manifests without a `branch` field fall back to `{prefix}/{workspace-name}`.
 - **Name validation:** lowercase alphanumeric + hyphens, max 63 characters, no leading or trailing hyphens.
-- **Interactive mode** (no `--repos` or `--groups`): if `[groups]` are defined in config, presents a group multi-select first (`[G]` config groups + `[O]` org groups), then repo multi-select. Config group selections pre-check repos. If no config groups AND ≤1 org, skips straight to repo selection.
+- **Interactive mode** (no `--repos` or `--groups`): presents a tree-based repo selector grouped by org path (folders start collapsed). Navigate with arrow keys, Enter to expand/collapse folders, Space to toggle repos, `a` to toggle all in a folder, `c` to confirm, Esc to cancel. For flat layouts (`scan_depth=1`), the tree degrades to a plain list.
 - **`--groups` + `--repos`:** group repos are added first, then `--repos`, deduped by path, sorted by (org, name). Unknown group names → hard error. Missing repos in a group → non-fatal warning.
 - **Partial failure:** if a worktree fails for one repo, others continue. Errors are reported at the end.
 
@@ -500,6 +505,47 @@ Uses the `[terminal]` config command, falling back to `TERM_PROGRAM` env var det
 
 ---
 
+### `loom editor`
+
+Open the workspace in the configured editor.
+
+```
+loom editor [NAME]
+```
+
+| Flag | Description |
+|------|-------------|
+| `[NAME]` | Workspace name. Optional — detects from cwd. |
+
+Uses the `[editor]` config command. Errors if no editor is configured — add `[editor]` to config.toml or run `loom init`.
+
+Supports the `open -a <App>` macOS pattern (e.g., `command = "open -a Cursor"`).
+
+---
+
+### `loom reset`
+
+Discard all uncommitted changes and rebase workspace branches to the base branch (or the repo's default branch).
+
+```
+loom reset [NAME] [--force]
+```
+
+| Flag | Description |
+|------|-------------|
+| `[NAME]` | Workspace name. Optional — detects from cwd. |
+| `--force` | Skip confirmation prompt. |
+
+**This is a destructive operation.** For each repo in the workspace:
+1. `git reset --hard HEAD` — discard staged and unstaged changes
+2. `git clean -fd` — remove untracked files and directories
+3. `git fetch origin` — fetch latest (non-fatal if offline)
+4. `git rebase origin/<base>` — rebase onto the workspace's base branch, or the repo's default branch if no base was set (falls back to hard reset on conflict)
+
+A confirmation prompt is shown unless `--force` is passed. Shows a progress bar during execution.
+
+---
+
 ### `loom refresh`
 
 Regenerate agent files (CLAUDE.md, `.claude/settings.json`, and `.mcp.json` if configured) from current config.
@@ -582,6 +628,7 @@ Configuration lives at `~/.config/loom/config.toml`. Created by `loom init`, edi
 | `[workspace]` | Yes | — |
 | `[sync]` | No | Sync disabled (`loom open` unavailable) |
 | `[terminal]` | No | Detected from `TERM_PROGRAM` env var |
+| `[editor]` | No | `loom editor` unavailable until configured |
 | `[defaults]` | No | `branch_prefix = "loom"` |
 | `[groups]` | No | No groups defined |
 | `[repos.<name>]` | No | `workflow = "pr"` for all repos |
@@ -610,7 +657,8 @@ root = "~/workspaces"
 # ── Required ──────────────────────────────────────────────
 
 [registry]
-scan_roots = ["~/_github.com", "~/code"]  # Dirs scanned for repos (2-level depth)
+scan_roots = ["~/_github.com", "~/code"]  # Dirs scanned for repos
+# scan_depth = 2                          # 1=flat, 2=org-grouped (default), 3=host/org/repo, 4=max
 
 [workspace]
 root = "~/workspaces"                      # Root directory for all workspaces
@@ -623,6 +671,9 @@ path = "loom/"                             # Subdirectory within sync repo
 
 [terminal]
 command = "ghostty"                        # Terminal for `loom shell`
+
+[editor]
+command = "zed"                            # Editor for `loom editor` (e.g., "zed", "code", "cursor")
 
 [defaults]
 branch_prefix = "loom"                     # Prefix for worktree branches (loom/<random-name>)
@@ -718,7 +769,8 @@ command = "rust-analyzer-mcp"
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `scan_roots` | `string[]` | — | Directories to scan for git repos. Tilde-expanded. Repos must be at exactly 2 levels deep: `{root}/{org}/{repo}`. |
+| `scan_roots` | `string[]` | — | Directories to scan for git repos. Tilde-expanded. Scan depth is controlled by `scan_depth`. |
+| `scan_depth` | `u8` | `2` | How many directory levels to traverse: 1=flat (`root/repo`), 2=org-grouped (`root/org/repo`, default), 3=`root/host/org/repo`, 4=max. |
 
 #### `[workspace]` (Required)
 
@@ -740,6 +792,12 @@ Omit this entire section to disable cross-machine sync. `loom save` still pushes
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `command` | `string` | Auto-detected | Terminal command for `loom shell`. Falls back to `TERM_PROGRAM` env var. |
+
+#### `[editor]` (Optional)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `command` | `string` | — | Editor command for `loom editor`. Common values: `"zed"`, `"code"`, `"cursor"`. |
 
 #### `[defaults]` (Optional)
 
@@ -1514,7 +1572,7 @@ See [Agent Integration](#agent-integration) for details.
 ### Init Failures
 
 **No git repos found in scan roots**
-Check the [scan root convention](#scan-root-convention). Repos must be at exactly 2 levels: `{root}/{org}/{repo}`.
+Check the [scan root convention](#scan-root-convention). Repos must be within `scan_depth` levels (default 2: `{root}/{org}/{repo}`). Adjust `registry.scan_depth` if your layout differs.
 
 **Invalid TOML after manual config edit**
 Validate syntax with a TOML checker. Common issues: missing quotes around strings with special characters, incorrect table nesting.

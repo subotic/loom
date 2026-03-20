@@ -4,10 +4,11 @@ Project-specific architectural context for the loom repository.
 
 ## Stack
 
-- **Language:** Rust (stable)
+- **Language:** Rust (nightly, edition 2024) — pinned via `rust-toolchain.toml`
 - **Crates:** `loom-cli` (binary), `loom-core` (library)
 - **Key deps:** `serde`/`toml`/`serde_json` (config), `anyhow` (errors), `clap` (CLI), `ratatui` (TUI), `insta` (snapshot tests), `tempfile` (test fixtures), `chrono` (timestamps)
 - **Test framework:** `cargo test` + `insta` snapshots (`cargo insta accept` for new/changed)
+- **Dev tools:** `cargo-insta` (`cargo install cargo-insta`) — required for reviewing/accepting snapshot tests
 
 ## Module Structure
 
@@ -19,7 +20,9 @@ Scopes match crate modules and map to conventional commit scopes:
 | `config/init.rs` | `config` | `loom init` wizard logic, security flavors |
 | `agent/` | `agent` | Agent file generation dispatch, `GeneratedFile` trait |
 | `agent/claude_code.rs` | `agent` | CLAUDE.md, settings.json, .mcp.json generation |
-| `workspace/` | `workspace` | Workspace lifecycle (new, add, remove, down, status) |
+| `workspace/` | `workspace` | Workspace lifecycle (new, add, remove, down, reset, status) |
+| `workspace/editor.rs` | `workspace` | Editor launch for workspaces |
+| `workspace/reset.rs` | `workspace` | Workspace reset (discard + rebase) |
 | `git/` | `git` | Git command wrapper, worktree operations |
 | `manifest/` | `manifest` | `.loom.json` read/write, name validation |
 | `registry/` | `registry` | Repo discovery from scan roots |
