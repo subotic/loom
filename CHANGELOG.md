@@ -1,6 +1,18 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [0.2.0](https://github.com/subotic/loom/compare/v0.1.0...v0.2.0) - 2026-03-20
+
+### Added
+
+- *(workspace)* add loom editor and loom reset commands
+- *(registry)* configurable scan_depth for flexible directory layouts
+- *(cli)* wire new commands, add flags, branch naming, and progress
+
+### Fixed
+
+- *(exec)* show command name, directory, and PATH hints on failure
+
 ## [0.1.0] - 2026-03-17
 
 ### Added
