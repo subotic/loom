@@ -61,3 +61,8 @@ self_update = { version = "0.43", default-features = false, features = [
 
 # Testing (used as dev-dependency in crates)
 insta = "1.42"
+
+# cargo-dist build profile
+[profile.dist]
+inherits = "release"
+lto = "thin"
