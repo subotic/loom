@@ -160,10 +160,8 @@ impl App {
 
             // --- Workspace List ---
             Message::SelectNext => match &mut self.screen {
-                Screen::WorkspaceList => {
-                    if !self.workspaces.is_empty() {
-                        self.selected = (self.selected + 1) % self.workspaces.len();
-                    }
+                Screen::WorkspaceList if !self.workspaces.is_empty() => {
+                    self.selected = (self.selected + 1) % self.workspaces.len();
                 }
                 Screen::WorkspaceDetail { .. } => {
                     // Could scroll repo list in future
@@ -173,10 +171,8 @@ impl App {
                     groups,
                     focused,
                     ..
-                } => {
-                    if !groups.is_empty() {
-                        *focused = (*focused + 1) % groups.len();
-                    }
+                } if !groups.is_empty() => {
+                    *focused = (*focused + 1) % groups.len();
                 }
                 Screen::NewWizard {
                     step: WizardStep::SelectRepos,
@@ -195,23 +191,19 @@ impl App {
                 _ => {}
             },
             Message::SelectPrev => match &mut self.screen {
-                Screen::WorkspaceList => {
-                    if !self.workspaces.is_empty() {
-                        self.selected = self
-                            .selected
-                            .checked_sub(1)
-                            .unwrap_or(self.workspaces.len() - 1);
-                    }
+                Screen::WorkspaceList if !self.workspaces.is_empty() => {
+                    self.selected = self
+                        .selected
+                        .checked_sub(1)
+                        .unwrap_or(self.workspaces.len() - 1);
                 }
                 Screen::NewWizard {
                     step: WizardStep::SelectGroups,
                     groups,
                     focused,
                     ..
-                } => {
-                    if !groups.is_empty() {
-                        *focused = focused.checked_sub(1).unwrap_or(groups.len() - 1);
-                    }
+                } if !groups.is_empty() => {
+                    *focused = focused.checked_sub(1).unwrap_or(groups.len() - 1);
                 }
                 Screen::NewWizard {
                     step: WizardStep::SelectRepos,
@@ -321,6 +313,7 @@ impl App {
                 let repos = crate::registry::discover_repos(
                     &self.config.registry.scan_roots,
                     Some(&self.config.workspace.root),
+                    self.config.registry.scan_depth,
                 );
 
                 // Build combined group list: config groups + org groups.
@@ -503,7 +496,7 @@ impl App {
                                     for rn in repo_names {
                                         if let Some(pos) = filtered.iter().position(|&ri| {
                                             let r = &available_repos[ri];
-                                            r.name == *rn || format!("{}/{}", r.org, r.name) == *rn
+                                            r.matches_name(rn)
                                         }) {
                                             pre_selected.insert(filtered[pos]);
                                             matched_count += 1;
@@ -584,10 +577,13 @@ impl App {
                             &self.config,
                             crate::workspace::new::NewWorkspaceOpts {
                                 name: name.clone(),
+                                branch: None,
+                                random_branch: false,
                                 repos,
                                 base_branch: None,
                                 preset: None,
                             },
+                            |_| {}, // TUI doesn't show progress bar
                         ) {
                             Ok(result) => {
                                 self.set_status(
@@ -726,7 +722,7 @@ impl App {
                 let by_org = selected_org_names.contains(r.org.as_str());
                 // Match by config group repo names (bare name or org/name)
                 let by_config = config_repo_names.contains(r.name.as_str())
-                    || config_repo_names.contains(format!("{}/{}", r.org, r.name).as_str());
+                    || config_repo_names.contains(r.display_name().as_str());
                 by_org || by_config
             })
             .filter(|(i, _)| seen.insert(*i))
@@ -811,10 +807,14 @@ mod tests {
         let ws_root = dir.join("loom");
         std::fs::create_dir_all(ws_root.join(".loom")).unwrap();
         Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig { root: ws_root },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),

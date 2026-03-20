@@ -9,7 +9,11 @@ fn test_discover_repos_integration() {
     env.add_repo("dasch-swiss", "dsp-das");
     env.add_repo("other-org", "my-tool");
 
-    let repos = discover_repos(&env.config.registry.scan_roots, Some(&env.workspace_root));
+    let repos = discover_repos(
+        &env.config.registry.scan_roots,
+        Some(&env.workspace_root),
+        env.config.registry.scan_depth,
+    );
 
     assert_eq!(repos.len(), 3);
 

@@ -22,13 +22,24 @@ pub struct NewWorkspaceResult {
 /// Options for creating a new workspace.
 pub struct NewWorkspaceOpts {
     pub name: String,
+    /// Explicit branch name override (--branch).
+    pub branch: Option<String>,
+    /// Force random branch name instead of deriving from workspace name (--random-branch).
+    pub random_branch: bool,
     pub repos: Vec<RepoEntry>,
     pub base_branch: Option<String>,
     pub preset: Option<String>,
 }
 
 /// Create a new workspace with worktrees for the selected repos.
-pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWorkspaceResult> {
+///
+/// The `on_progress` callback receives events for each repo processed,
+/// allowing the CLI layer to drive a progress bar.
+pub fn create_workspace(
+    config: &Config,
+    opts: NewWorkspaceOpts,
+    on_progress: impl Fn(super::ProgressEvent),
+) -> Result<NewWorkspaceResult> {
     // Validate workspace name
     manifest::validate_name(&opts.name)?;
 
@@ -91,13 +102,54 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
     let branch_prefix = &config.defaults.branch_prefix;
     let now = Utc::now();
 
-    // Generate a random branch name that doesn't collide with existing refs
+    // Determine branch name: explicit --branch > --random-branch > derive from workspace name
     let repo_paths: Vec<PathBuf> = opts.repos.iter().map(|r| r.path.clone()).collect();
-    let branch_name = crate::names::generate_unique_branch_name(
-        branch_prefix,
-        &repo_paths,
-        crate::names::MAX_NAME_RETRIES,
-    )?;
+    let branch_name = if let Some(explicit) = opts.branch {
+        let candidate = if explicit.contains('/') {
+            explicit
+        } else {
+            format!("{branch_prefix}/{explicit}")
+        };
+        // Validate using git's own ref-format rules (covers all edge cases)
+        let check = std::process::Command::new("git")
+            .args(["check-ref-format", "--branch", &candidate])
+            .env("LC_ALL", "C")
+            .output();
+        match check {
+            Ok(output) if !output.status.success() => {
+                anyhow::bail!(
+                    "Invalid branch name '{}'. git check-ref-format rejected it.",
+                    candidate
+                );
+            }
+            Err(e) => {
+                tracing::warn!("git check-ref-format failed: {e}, skipping validation");
+            }
+            _ => {}
+        }
+        candidate
+    } else if opts.random_branch {
+        crate::names::generate_unique_branch_name(
+            branch_prefix,
+            &repo_paths,
+            crate::names::MAX_NAME_RETRIES,
+        )?
+    } else {
+        format!("{branch_prefix}/{}", opts.name)
+    };
+
+    // Check for branch collisions in all repos
+    for repo in &opts.repos {
+        let git = GitRepo::new(&repo.path);
+        if git.ref_exists(&branch_name).unwrap_or(false) {
+            anyhow::bail!(
+                "Branch '{}' already exists in {}. Use `loom down` to remove the old workspace first, \
+                 or choose a different workspace name.",
+                branch_name,
+                repo.name
+            );
+        }
+    }
 
     // Write state.json FIRST (with 0 repos) — Ctrl+C safety
     let state_path = config.workspace.root.join(".loom").join("state.json");
@@ -124,7 +176,19 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
     let mut repos_failed = Vec::new();
 
     // Process each repo
-    for repo in &opts.repos {
+    let total = opts.repos.len();
+    for (i, repo) in opts.repos.iter().enumerate() {
+        on_progress(super::ProgressEvent::RepoStarted {
+            name: repo.name.clone(),
+            index: i,
+            total,
+        });
+        tracing::debug!(
+            repo = %repo.name,
+            index = i,
+            total,
+            "adding repo to workspace"
+        );
         match add_repo_to_workspace(
             &ws_path,
             repo,
@@ -147,9 +211,17 @@ pub fn create_workspace(config: &Config, opts: NewWorkspaceOpts) -> Result<NewWo
                     repo_count: repos_added,
                 });
                 manifest::write_global_state(&state_path, &state)?;
+                on_progress(super::ProgressEvent::RepoComplete {
+                    name: repo.name.clone(),
+                });
             }
             Err(e) => {
-                repos_failed.push((repo.name.clone(), e.to_string()));
+                let msg = e.to_string();
+                on_progress(super::ProgressEvent::RepoFailed {
+                    name: repo.name.clone(),
+                    error: msg.clone(),
+                });
+                repos_failed.push((repo.name.clone(), msg));
             }
         }
     }
@@ -283,10 +355,14 @@ mod tests {
         let ws_root = dir.join("loom");
         std::fs::create_dir_all(ws_root.join(".loom")).unwrap();
         Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig { root: ws_root },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -335,14 +411,18 @@ mod tests {
             &config,
             NewWorkspaceOpts {
                 name: "test-ws".to_string(),
+                branch: None,
+                random_branch: false,
                 repos: vec![repo],
                 base_branch: None,
                 preset: None,
             },
+            |_| {},
         )
         .unwrap();
 
         assert_eq!(result.name, "test-ws");
+        assert_eq!(result.branch, "loom/test-ws");
         assert_eq!(result.repos_added, 1);
         assert!(result.repos_failed.is_empty());
         assert!(result.path.join(super::super::MANIFEST_FILENAME).exists());
@@ -361,10 +441,13 @@ mod tests {
             &config,
             NewWorkspaceOpts {
                 name: "existing".to_string(),
+                branch: None,
+                random_branch: false,
                 repos: vec![repo],
                 base_branch: None,
                 preset: None,
             },
+            |_| {},
         );
 
         assert!(result.is_err());
@@ -380,10 +463,13 @@ mod tests {
             &config,
             NewWorkspaceOpts {
                 name: "empty".to_string(),
+                branch: None,
+                random_branch: false,
                 repos: vec![],
                 base_branch: None,
                 preset: None,
             },
+            |_| {},
         );
 
         assert!(result.is_err());
@@ -399,10 +485,13 @@ mod tests {
             &config,
             NewWorkspaceOpts {
                 name: "INVALID NAME".to_string(),
+                branch: None,
+                random_branch: false,
                 repos: vec![],
                 base_branch: None,
                 preset: None,
             },
+            |_| {},
         );
 
         assert!(result.is_err());
@@ -418,10 +507,13 @@ mod tests {
             &config,
             NewWorkspaceOpts {
                 name: "state-test".to_string(),
+                branch: None,
+                random_branch: false,
                 repos: vec![repo],
                 base_branch: None,
                 preset: None,
             },
+            |_| {},
         )
         .unwrap();
 

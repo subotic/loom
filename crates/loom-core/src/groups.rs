@@ -60,9 +60,7 @@ pub fn resolve_groups(
     for group_name in &unique_names {
         let repo_names = &groups[group_name.as_str()];
         for repo_name in repo_names {
-            let found = all_repos
-                .iter()
-                .find(|r| r.name == *repo_name || format!("{}/{}", r.org, r.name) == *repo_name);
+            let found = all_repos.iter().find(|r| r.matches_name(repo_name));
             match found {
                 Some(r) => {
                     if seen_paths.insert(r.path.clone()) {

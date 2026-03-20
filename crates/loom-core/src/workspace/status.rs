@@ -1,12 +1,13 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use serde::Serialize;
 
 use crate::git::GitRepo;
 use crate::manifest::WorkspaceManifest;
 
 /// Detailed status for a single repo in a workspace.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct RepoStatus {
     pub name: String,
     pub worktree_path: PathBuf,
@@ -19,7 +20,7 @@ pub struct RepoStatus {
 }
 
 /// Status of an entire workspace.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct WorkspaceStatus {
     pub name: String,
     pub path: PathBuf,
@@ -144,6 +145,39 @@ mod tests {
         assert!(status.repos[0].exists);
         assert!(!status.repos[0].is_dirty);
         assert_eq!(status.repos[0].change_count, 0);
+    }
+
+    #[test]
+    fn test_status_json_snapshot() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_path = dir.path().join("my-repo");
+        create_git_repo(&repo_path);
+
+        let manifest = WorkspaceManifest {
+            name: "test-ws".to_string(),
+            branch: Some("loom/test-ws".to_string()),
+            created: chrono::Utc::now(),
+            base_branch: Some("main".to_string()),
+            preset: None,
+            repos: vec![RepoManifestEntry {
+                name: "my-repo".to_string(),
+                original_path: repo_path.clone(),
+                worktree_path: repo_path,
+                branch: "loom/test-ws".to_string(),
+                remote_url: String::new(),
+            }],
+        };
+
+        let ws_path = dir.path().join("ws");
+        let status = workspace_status(&manifest, &ws_path, false).unwrap();
+
+        // Redact dynamic paths for snapshot stability
+        let mut redacted = status;
+        redacted.path = PathBuf::from("<WORKSPACE>");
+        for repo in &mut redacted.repos {
+            repo.worktree_path = PathBuf::from("<WORKTREE>");
+        }
+        insta::assert_snapshot!(serde_json::to_string_pretty(&redacted).unwrap());
     }
 
     #[test]

@@ -38,7 +38,19 @@ pub fn detect_terminal() -> Option<String> {
     std::env::var("TERM_PROGRAM").ok().map(|t| {
         // Map common terminal program names to their CLI commands
         match t.as_str() {
-            "ghostty" => "ghostty".to_string(),
+            "ghostty" => {
+                // On macOS, the bare "ghostty" command may not open a terminal shell
+                // (it opens a config interface instead). Prefer "open -a Ghostty"
+                // when the .app bundle exists.
+                if cfg!(target_os = "macos")
+                    && std::path::Path::new("/Applications/Ghostty.app").exists()
+                {
+                    "open -a Ghostty".to_string()
+                } else {
+                    // Linux or Nix/Homebrew install — bare command works
+                    "ghostty".to_string()
+                }
+            }
             "WezTerm" => "wezterm".to_string(),
             "iTerm.app" => "open -a iTerm".to_string(),
             "Apple_Terminal" => "open -a Terminal".to_string(),
@@ -250,12 +262,16 @@ pub fn create_config(
     eprintln!("  git version: {git_version}");
 
     let config = Config {
-        registry: RegistryConfig { scan_roots },
+        registry: RegistryConfig {
+            scan_roots,
+            scan_depth: 2,
+        },
         workspace: WorkspaceConfig {
             root: workspace_root,
         },
         sync: None,
         terminal: terminal.map(|command| TerminalConfig { command }),
+        editor: None, // Add [editor] section to config.toml to enable `loom editor`
         defaults: DefaultsConfig { branch_prefix },
         groups: BTreeMap::new(),
         repos: BTreeMap::new(),
@@ -423,6 +439,12 @@ pub fn finalize_init(config: &Config) -> Result<()> {
         )
     })?;
 
+    if config.editor.is_none() {
+        eprintln!(
+            "  hint: add [editor] to config.toml to enable `loom editor` (e.g., command = \"zed\")"
+        );
+    }
+
     Ok(())
 }
 
@@ -559,12 +581,14 @@ mod tests {
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/workspaces"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -593,12 +617,14 @@ mod tests {
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/workspaces"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -647,6 +673,7 @@ auto_allow = true
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/new/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/new/workspaces"),
@@ -655,6 +682,7 @@ auto_allow = true
             terminal: Some(TerminalConfig {
                 command: "wezterm".to_string(),
             }),
+            editor: None,
             defaults: DefaultsConfig {
                 branch_prefix: "dev".to_string(),
             },
@@ -692,12 +720,16 @@ auto_allow = true
         let ws_root = dir.path().join("loom");
 
         let _config = Config {
-            registry: RegistryConfig { scan_roots: vec![] },
+            registry: RegistryConfig {
+                scan_roots: vec![],
+                scan_depth: 2,
+            },
             workspace: WorkspaceConfig {
                 root: ws_root.clone(),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -773,12 +805,14 @@ auto_allow = true
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/workspaces"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
@@ -824,12 +858,14 @@ enabled = ["claude-code"]
         let config = Config {
             registry: RegistryConfig {
                 scan_roots: vec![PathBuf::from("/new/code")],
+                scan_depth: 2,
             },
             workspace: WorkspaceConfig {
                 root: PathBuf::from("/new/workspaces"),
             },
             sync: None,
             terminal: None,
+            editor: None,
             defaults: DefaultsConfig::default(),
             groups: BTreeMap::new(),
             repos: BTreeMap::new(),
