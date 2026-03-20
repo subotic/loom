@@ -1,4 +1,5 @@
 mod cli;
+mod tree_select;
 
 use clap::Parser;
 use cli::{Cli, Verbosity};
